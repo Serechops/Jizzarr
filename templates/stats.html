@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jizzarr Collection Stats</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            font-family: 'Montserrat', Arial, sans-serif;
+        }
+        .container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center !important;
+            flex-direction: column;
+            text-align: center !important;
+            margin-top: 50px;
+        }
+        #infographic {
+            width: 100%; 
+            max-width: 1400px;
+            margin: 20px auto;
+        }
+        #collectionChart {
+            width: 100%;
+            height: 500px;
+        }
+        .legend-container {
+            display: flex;
+            flex-direction: column; /* Stack items vertically */
+            align-items: center; /* Center items horizontally */
+            margin-bottom: 20px;
+        }
+        .legend-item {
+            margin: 0 10px;
+        }
+        .custom-navbar {
+            width: 100%;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(6px);
+        }
+        .custom-navbar a {
+            color: #ffffff;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 5px 10px;
+        }
+        .custom-navbar a:hover {
+            background-color: #495057;
+            border-radius: 4px;
+        }
+        .column {
+            margin-bottom: 20px;
+        }
+		.legend-item {
+		margin: 0 10px;
+		font-size: 1.2rem;
+		}		
+    </style>
+</head>
+<body>
+    <nav class="custom-navbar">
+        <a href="{{ url_for('index') }}">Jizzarr Home</a>
+        <a href="{{ url_for('collection') }}">My Collection</a>
+        <a href="{{ url_for('config_page') }}">Settings</a>
+        <a href="{{ url_for('logs') }}">Logs</a>
+        <a href="{{ url_for('stats_page') }}">Stats</a>
+    </nav>
+    <div class="container">
+        <div id="infographic" class="infographic">
+            <h4 class="text-center">Collection Stats</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="legend-container">
+                        <div class="legend-item">
+                            <div class="legend-color legend-collected"></div>
+                            <span>Missing Scenes: <span id="total-scenes">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-missing"></div>
+                            <span>Collected Scenes: <span id="collected-scenes">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-collected-duration"></div>
+                            <span>Collected Duration: <span id="collected-duration">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-missing-duration"></div>
+                            <span>Missing Duration: <span id="missing-duration">0</span></span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-rating"></div>
+                            <span>Average Rating: <span id="avg-rating">0</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <canvas id="collectionChart"></canvas>
+                </div>
+            </div>
+            <h4><div id="encouragement-message" class="mt-4"></div></h4>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        function convertMinutesToDetailedDuration(minutes) {
+            const years = Math.floor(minutes / 525600);
+            minutes %= 525600;
+            const days = Math.floor(minutes / 1440);
+            minutes %= 1440;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+
+            return `${years} Year(s) ${days} Days ${hours} Hours and ${mins} Minutes`;
+        }
+
+        async function fetchCollectionStats() {
+            const response = await fetch('/collection_stats');
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}: ${await response.text()}`);
+            }
+            return response.json();
+        }
+
+        async function drawChart() {
+            try {
+                const stats = await fetchCollectionStats();
+                
+                document.getElementById('total-scenes').textContent = stats.total;
+                document.getElementById('collected-scenes').textContent = stats.collected;
+                document.getElementById('collected-duration').textContent = convertMinutesToDetailedDuration(stats.collected_duration);
+                document.getElementById('missing-duration').textContent = convertMinutesToDetailedDuration(stats.missing_duration);
+                document.getElementById('avg-rating').textContent = stats.avg_rating;
+
+                const ctx = document.getElementById('collectionChart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Collected', 'Missing'],
+                        datasets: [{
+                            label: 'Collection Stats',
+                            data: [stats.collected, stats.total - stats.collected],
+                            backgroundColor: ['#00b09b', '#ff5f6d'],
+                            borderColor: ['#00b09b', '#ff5f6d'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Collection Stats'
+                            }
+                        }
+                    }
+                });
+
+                const differenceDuration = stats.missing_duration - stats.collected_duration;
+                document.getElementById('encouragement-message').textContent = `You only need to collect a total of ${convertMinutesToDetailedDuration(differenceDuration)} worth of viewing time!`;
+
+            } catch (error) {
+                console.error('Error fetching collection stats:', error);
+                Toastify({
+                    text: 'Error fetching collection stats: ' + error.message,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', drawChart);
+    </script>
+</body>
+</html>

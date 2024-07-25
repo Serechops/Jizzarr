@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='logs.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/js-logger/src/logger.min.js"></script>
+    <style>
+        .highlight {
+            background-color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <nav class="custom-navbar">
+        <a href="{{ url_for('index') }}">Jizzarr Home</a>
+        <a href="{{ url_for('collection') }}">My Collection</a>
+        <a href="{{ url_for('config_page') }}">Settings</a>
+        <a href="{{ url_for('logs') }}">Logs</a>
+        <a href="{{ url_for('stats_page') }}">Stats</a>
+    </nav>
+    <div class="container">
+        <h1 class="text-center">Logs</h1>
+        <div class="d-flex mb-4">
+            <button class="btn btn-primary-dark me-2" onclick="downloadLogs()">Download Logs</button>
+            <button class="btn btn-danger-dark me-2" onclick="clearLogs()">Clear Logs</button>
+            <input type="text" class="form-control" id="search-input" placeholder="Search logs...">
+        </div>
+        <table class="table table-dark table-striped">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Level</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody id="log-entries">
+                <!-- Log entries will be loaded here -->
+            </tbody>
+        </table>
+        <div class="pagination-controls d-flex justify-content-center mt-4">
+            <button id="first-page" class="btn btn-outline-secondary me-2">First</button>
+            <button id="prev-page" class="btn btn-outline-secondary me-2">Prev</button>
+            <button id="next-page" class="btn btn-outline-secondary me-2">Next</button>
+            <button id="last-page" class="btn btn-outline-secondary">Last</button>
+        </div>
+    </div>
+    <script>
+        const logEntriesContainer = document.getElementById('log-entries');
+        const searchInput = document.getElementById('search-input');
+        const firstPageButton = document.getElementById('first-page');
+        const prevPageButton = document.getElementById('prev-page');
+        const nextPageButton = document.getElementById('next-page');
+        const lastPageButton = document.getElementById('last-page');
+
+        let currentPage = 1;
+        let totalPages = 1;
+        const logsPerPage = 20;
+
+        function downloadLogs() {
+            window.location.href = '/download_logs';
+        }
+
+        function clearLogs() {
+            if (confirm('Are you sure you want to clear all logs?')) {
+                fetch('/clear_logs', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            fetchLogs();
+                            Toastify({
+                                text: 'Logs cleared successfully',
+                                duration: 3000,
+                                close: true,
+                                gravity: "top",
+                                position: "right",
+                                backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                            }).showToast();
+                        } else {
+                            throw new Error(data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error clearing logs:', error);
+                        Toastify({
+                            text: 'Error clearing logs: ' + error.message,
+                            duration: 3000,
+                            close: true,
+                            gravity: "top",
+                            position: "right",
+                            backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                        }).showToast();
+                    });
+            }
+        }
+
+        function highlight(text, search) {
+            if (!search) return text;
+            const pattern = new RegExp(`(${search})`, 'gi');
+            return text.replace(pattern, '<span class="highlight">$1</span>');
+        }
+
+        async function fetchLogs(page = 1, search = '') {
+            try {
+                const response = await fetch(`/logs_data?page=${page}&per_page=${logsPerPage}&search=${search}`);
+                const data = await response.json();
+                totalPages = data.total_pages;
+                currentPage = data.current_page;
+                displayLogs(data.logs, search);
+                updatePaginationButtons();
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+            }
+        }
+
+        function displayLogs(logs, search) {
+            logEntriesContainer.innerHTML = '';
+            logs.forEach(log => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${log.timestamp}</td>
+                    <td class="log-level">${highlight(log.level, search)}</td>
+                    <td class="log-message">${highlight(log.message, search)}</td>
+                `;
+                logEntriesContainer.appendChild(row);
+            });
+        }
+
+        function updatePaginationButtons() {
+            firstPageButton.disabled = currentPage === 1;
+            prevPageButton.disabled = currentPage === 1;
+            nextPageButton.disabled = currentPage === totalPages;
+            lastPageButton.disabled = currentPage === totalPages;
+        }
+
+        firstPageButton.addEventListener('click', () => {
+            currentPage = 1;
+            fetchLogs(currentPage, searchInput.value);
+        });
+
+        prevPageButton.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchLogs(currentPage, searchInput.value);
+            }
+        });
+
+        nextPageButton.addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                fetchLogs(currentPage, searchInput.value);
+            }
+        });
+
+        lastPageButton.addEventListener('click', () => {
+            currentPage = totalPages;
+            fetchLogs(currentPage, searchInput.value);
+        });
+
+        searchInput.addEventListener('input', debounce(() => {
+            fetchLogs(1, searchInput.value);
+        }, 300));
+
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+
+        fetchLogs();
+    </script>
+</body>
+</html>

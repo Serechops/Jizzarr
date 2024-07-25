@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='config.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="custom-navbar">
+        <a href="{{ url_for('index') }}">Jizzarr Home</a>
+        <a href="{{ url_for('collection') }}">My Collection</a>
+        <a href="{{ url_for('config_page') }}">Settings</a>
+        <a href="{{ url_for('logs') }}">Logs</a>
+        <a href="{{ url_for('stats_page') }}">Stats</a>
+    </nav>
+    <div class="container">
+        <h1>Configuration</h1>
+        <div class="config-wrapper">
+            <div class="config-container">
+                <form id="config-form">
+                    <div class="form-group">
+                        <label for="stashEndpoint" class="form-label">Stash Server Endpoint</label>
+                        <input type="text" class="form-control-dark" id="stashEndpoint" name="stashEndpoint" placeholder="http://localhost:9999/graphql" value="{{ stash_endpoint }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="stashApiKey" class="form-label">Stash API Key</label>
+                        <input type="password" class="form-control-dark" id="stashApiKey" name="stashApiKey" placeholder="Enter your Stash API Key" value="{{ stash_api_key }}">
+                        <button type="button" class="btn-show" onclick="toggleVisibility('stashApiKey')">Show</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="tpdbApiKey" class="form-label">TPDB API Key</label>
+                        <input type="password" class="form-control-dark" id="tpdbApiKey" name="tpdbApiKey" placeholder="Enter your TPDB API Key" value="{{ tpdb_api_key }}">
+                        <button type="button" class="btn-show" onclick="toggleVisibility('tpdbApiKey')">Show</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="downloadFolder" class="form-label">Set Download Watch Folder</label>
+                        <input type="text" class="form-control-dark" id="downloadFolder" name="downloadFolder" value="{{ download_folder }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="libraryDirectory" class="form-label">Add Library Directory</label>
+                        <input type="text" class="form-control-dark" id="libraryDirectory" name="libraryDirectory" placeholder="Enter library directory path">
+                        <button type="button" class="btn-primary-dark" id="setLibraryButton">Add Library Directory</button>
+                    </div>
+                    <button type="submit" class="btn-primary-dark">Save Configuration</button>
+                </form>
+                <button type="button" class="btn-primary-dark mt-3" id="scanLibrariesButton">Scan Libraries for Changes</button>
+                <div class="config-container mt-4 scrollable-container">
+                    {% for library, sites in libraries_with_sites.items() %}
+                        <div class="row">
+                            <div class="col">
+                                <h2>{{ library.path }}</h2>
+                                <button class="btn-remove" onclick="removeLibrary('{{ library.id }}')">Remove</button>
+                                <ul>
+                                    {% for site in sites %}
+                                        <li><b>{{ site.name }}</b>: <span class="path">{{ site.home_directory }}</span></li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.js"></script>
+    <script>
+        document.getElementById('config-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const stashEndpoint = document.getElementById('stashEndpoint').value;
+            const stashApiKey = document.getElementById('stashApiKey').value;
+            const tpdbApiKey = document.getElementById('tpdbApiKey').value;
+            const downloadFolder = document.getElementById('downloadFolder').value;
+
+            const configData = {
+                stashEndpoint,
+                stashApiKey,
+                tpdbApiKey,
+                downloadFolder
+            };
+
+            try {
+                const response = await fetch('/save_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(configData)
+                });
+
+                if (response.ok) {
+                    Toastify({
+                        text: 'Configuration saved successfully',
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+                } else {
+                    const result = await response.json();
+                    Toastify({
+                        text: `Failed to save configuration: ${result.error || 'Unknown error'}`,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                    }).showToast();
+                }
+            } catch (error) {
+                Toastify({
+                    text: `Failed to save configuration: ${error.message}`,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            }
+        });
+
+        document.getElementById('setLibraryButton').addEventListener('click', async function() {
+            const libraryDirectory = document.getElementById('libraryDirectory').value;
+
+            if (!libraryDirectory) {
+                Toastify({
+                    text: 'Library directory is required',
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+                return;
+            }
+
+            try {
+                const response = await fetch('/set_library_directory', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ libraryDirectory })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    Toastify({
+                        text: result.message,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+
+                    // Add the new library directory to the main library list
+                    const mainLibraryList = document.getElementById('mainLibraryList');
+                    const newMainListItem = document.createElement('li');
+                    newMainListItem.innerHTML = `${libraryDirectory} <button class="btn-remove" onclick="removeLibrary('${result.directory_id}')">Remove</button>`;
+                    mainLibraryList.appendChild(newMainListItem);
+
+                    // Add the matched home site directories to the home site list
+                    const homeSiteList = document.getElementById('homeSiteList');
+                    result.matches.forEach(match => {
+                        const newHomeListItem = document.createElement('li');
+                        newHomeListItem.textContent = `${match.site_name}: ${match.directory}`;
+                        homeSiteList.appendChild(newHomeListItem);
+                    });
+
+                    // Sort the home site list alphabetically
+                    sortHomeSiteList();
+                } else {
+                    const result = await response.json();
+                    Toastify({
+                        text: `Failed to add library directory: ${result.error || 'Unknown error'}`,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                    }).showToast();
+                }
+            } catch (error) {
+                Toastify({
+                    text: `Failed to add library directory: ${error.message}`,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            }
+        });
+
+        document.getElementById('scanLibrariesButton').addEventListener('click', async function() {
+            try {
+                const response = await fetch('/scan_libraries', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    Toastify({
+                        text: result.message,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+
+                    // Refresh the home site list
+                    const homeSiteList = document.getElementById('homeSiteList');
+                    homeSiteList.innerHTML = '';
+                    result.matches.forEach(match => {
+                        const newHomeListItem = document.createElement('li');
+                        newHomeListItem.textContent = `${match.site_name}: ${match.directory}`;
+                        homeSiteList.appendChild(newHomeListItem);
+                    });
+
+                    // Sort the home site list alphabetically
+                    sortHomeSiteList();
+                } else {
+                    const result = await response.json();
+                    Toastify({
+                        text: `Failed to scan libraries: ${result.error || 'Unknown error'}`,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                    }).showToast();
+                }
+            } catch (error) {
+                Toastify({
+                    text: `Failed to scan libraries: ${error.message}`,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            }
+        });
+
+        async function removeLibrary(libraryId) {
+            try {
+                const response = await fetch(`/remove_library/${libraryId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    Toastify({
+                        text: 'Library removed successfully',
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+
+                    // Remove the library from the main library list
+                    const libraryItem = document.querySelector(`li button[onclick="removeLibrary('${libraryId}')"]`).parentElement;
+                    libraryItem.remove();
+
+                    // Refresh the home site list
+                    const homeSiteList = document.getElementById('homeSiteList');
+                    homeSiteList.innerHTML = '';
+                    const responseSites = await fetch('/get_home_directories');
+                    if (responseSites.ok) {
+                        const sites = await responseSites.json();
+                        sites.forEach(site => {
+                            const newHomeListItem = document.createElement('li');
+                            newHomeListItem.textContent = `${site.name}: ${site.home_directory}`;
+                            homeSiteList.appendChild(newHomeListItem);
+                        });
+                    }
+
+                    // Sort the home site list alphabetically
+                    sortHomeSiteList();
+                } else {
+                    const result = await response.json();
+                    Toastify({
+                        text: `Failed to remove library: ${result.error || 'Unknown error'}`,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                    }).showToast();
+                }
+            } catch (error) {
+                Toastify({
+                    text: `Failed to remove library: ${error.message}`,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            }
+        }
+
+        function sortHomeSiteList() {
+            const homeSiteList = document.getElementById('homeSiteList');
+            const items = Array.from(homeSiteList.querySelectorAll('li'));
+            items.sort((a, b) => a.textContent.localeCompare(b.textContent));
+            homeSiteList.innerHTML = '';
+            items.forEach(item => homeSiteList.appendChild(item));
+        }
+
+        function toggleVisibility(id) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
+        }
+    </script>
+</body>
+</html>

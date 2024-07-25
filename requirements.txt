@@ -1,0 +1,11 @@
+Flask==2.0.3
+Flask-Cors==3.0.10
+Flask-SQLAlchemy==2.5.1
+SQLAlchemy==1.4.27
+fuzzywuzzy==0.18.0
+mutagen==1.45.1
+requests==2.26.0
+pystray==0.17.3
+Pillow==8.4.0
+moviepy==1.0.3
+watchdog==2.1.6
