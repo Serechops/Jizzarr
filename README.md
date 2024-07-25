@@ -95,11 +95,9 @@ The application has robust logging and error handling mechanisms, ensuring smoot
 ### Statistics
 - View detailed statistics about the number of scenes, total and collected duration, average site rating, and more.
 
-## Contributing
-Contributions are welcome! Please fork the repository and submit a pull request.
-
 ## License
 This project is licensed under the Unilicense.
 
 ## Acknowledgments
-- ThePornDB and Stash for their comprehensive adult content databases.
+- To Gykes and having this crazy inspiration!
+- ThePornDB and Stash for their comprehensive adult content databases and media management system.
