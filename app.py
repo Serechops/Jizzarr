@@ -111,17 +111,24 @@ def index():
 def stats_page():
     return render_template('stats.html')
 
+def get_config_value(key):
+    config = Config.query.filter_by(key=key).first()
+    value = config.value if config else ''
+    app.logger.debug(f"Config value for {key}: {value}")
+    return value
+
 @app.route('/config_page', methods=['GET'])
 def config_page():
-    stash_endpoint = get_config_value('stash_endpoint')
-    stash_api_key = get_config_value('stash_api_key')
-    tpdb_api_key = get_config_value('tpdb_api_key')
-    download_folder = get_config_value('download_folder')
-    
+    stash_endpoint = get_config_value('stashEndpoint')
+    stash_api_key = get_config_value('stashApiKey')
+    tpdb_api_key = get_config_value('tpdbApiKey')
+    download_folder = get_config_value('downloadFolder')
+
+    app.logger.debug(f"Fetched config values: stash_endpoint={stash_endpoint}, stash_api_key={stash_api_key}, tpdb_api_key={tpdb_api_key}, download_folder={download_folder}")
+
     library_directories = LibraryDirectory.query.all()
     sites = Site.query.all()
     
-    # Structure data by library
     libraries_with_sites = {}
     for library in library_directories:
         libraries_with_sites[library] = [site for site in sites if site.home_directory and site.home_directory.startswith(library.path)]
@@ -129,16 +136,12 @@ def config_page():
     return render_template('config.html', stash_endpoint=stash_endpoint, stash_api_key=stash_api_key, tpdb_api_key=tpdb_api_key, 
                            download_folder=download_folder, libraries_with_sites=libraries_with_sites)
 
-def get_config_value(key):
-    config = Config.query.filter_by(key=key).first()
-    return config.value if config else ''
-
-
 @app.route('/save_config', methods=['POST'])
 def save_config():
     try:
         config_data = request.json
         for key, value in config_data.items():
+            # Ensure consistent key naming
             config = Config.query.filter_by(key=key).first()
             if config:
                 config.value = value
@@ -146,9 +149,11 @@ def save_config():
                 config = Config(key=key, value=value)
                 db.session.add(config)
         db.session.commit()
+        app.logger.debug(f"Saved config values: {config_data}")
         return jsonify({"message": "Configuration saved successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/get_tpdb_api_key', methods=['GET'])
 def get_tpdb_api_key():
