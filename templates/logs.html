@@ -18,7 +18,10 @@
 </head>
 <body>
     <nav class="custom-navbar">
-        <a href="{{ url_for('index') }}">Jizzarr Home</a>
+        <a href="{{ url_for('index') }}">
+            <img src="{{ url_for('static', filename='favicon.ico') }}" alt="Favicon" class="favicon">
+            Jizzarr Home
+        </a>
         <a href="{{ url_for('collection') }}">My Collection</a>
         <a href="{{ url_for('config_page') }}">Settings</a>
         <a href="{{ url_for('logs') }}">Logs</a>

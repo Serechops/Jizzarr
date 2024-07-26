@@ -138,6 +138,12 @@
             background-color: green;
             color: white;
         }
+        .favicon {
+            width: 25px;  
+            height: 25px;  
+            margin-right: 8px;  
+            vertical-align: middle; 
+        }
         .custom-navbar {
             width: 100%;
             position: fixed;

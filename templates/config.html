@@ -11,7 +11,10 @@
 </head>
 <body>
     <nav class="custom-navbar">
-        <a href="{{ url_for('index') }}">Jizzarr Home</a>
+        <a href="{{ url_for('index') }}">
+            <img src="{{ url_for('static', filename='favicon.ico') }}" alt="Favicon" class="favicon">
+            Jizzarr Home
+        </a>
         <a href="{{ url_for('collection') }}">My Collection</a>
         <a href="{{ url_for('config_page') }}">Settings</a>
         <a href="{{ url_for('logs') }}">Logs</a>
@@ -49,19 +52,24 @@
                 </form>
                 <button type="button" class="btn-primary-dark mt-3" id="scanLibrariesButton">Scan Libraries for Changes</button>
                 <div class="config-container mt-4 scrollable-container">
-                    {% for library, sites in libraries_with_sites.items() %}
+                    <ul id="mainLibraryList">
+                        {% for library, sites in libraries_with_sites.items() %}
                         <div class="row">
                             <div class="col">
                                 <h2>{{ library.path }}</h2>
                                 <button class="btn-remove" onclick="removeLibrary('{{ library.id }}')">Remove</button>
                                 <ul>
                                     {% for site in sites %}
-                                        <li><b>{{ site.name }}</b>: <span class="path">{{ site.home_directory }}</span></li>
+                                    <li><b>{{ site.name }}</b>: <span class="path">{{ site.home_directory }}</span></li>
                                     {% endfor %}
                                 </ul>
                             </div>
                         </div>
-                    {% endfor %}
+                        {% endfor %}
+                    </ul>
+                    <ul id="homeSiteList">
+                        <!-- Populated dynamically by JS -->
+                    </ul>
                 </div>
             </div>
         </div>
@@ -269,8 +277,13 @@
                     }).showToast();
 
                     // Remove the library from the main library list
-                    const libraryItem = document.querySelector(`li button[onclick="removeLibrary('${libraryId}')"]`).parentElement;
-                    libraryItem.remove();
+                    const removeButton = document.querySelector(`button[onclick="removeLibrary('${libraryId}')"]`);
+                    if (removeButton) {
+                        const libraryItem = removeButton.parentElement;
+                        if (libraryItem) {
+                            libraryItem.remove();
+                        }
+                    }
 
                     // Refresh the home site list
                     const homeSiteList = document.getElementById('homeSiteList');

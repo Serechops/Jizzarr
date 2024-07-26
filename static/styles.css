@@ -11,6 +11,13 @@ body {
     overflow: auto;
 }
 
+.favicon {
+    width: 25px;  
+    height: 25px;  
+    margin-right: 8px;  
+    vertical-align: middle; 
+}
+
 .container {
     background-color: #1e1e1e;
     padding: 20px;
