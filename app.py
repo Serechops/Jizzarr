@@ -26,12 +26,22 @@ from config import Config as AppConfig
 import pystray
 from PIL import Image, ImageDraw
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///jizzarr.db'
+# Initialize the Flask application
+app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
+
+# Ensure the instance folder exists
+if not os.path.exists(app.instance_path):
+    os.makedirs(app.instance_path)
+# Use the instance folder for SQLite database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'jizzarr.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 event_queue = queue.Queue()
 app.config.from_object(AppConfig)
+
+# Create tables before the first request
+with app.app_context():
+    db.create_all()
 
 class SSEHandler(logging.Handler):
     def __init__(self):
@@ -98,10 +108,6 @@ def start_sse_thread():
 
 # Enable CORS for the app
 CORS(app)
-
-# Create tables before the first request
-with app.app_context():
-    db.create_all()
 
 @app.route('/')
 def index():
