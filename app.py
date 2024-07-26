@@ -695,7 +695,7 @@ def search_stash_for_matches():
             "Accept-Encoding": "gzip, deflate, br",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": f"Apikey {stash_api_key.value}"
+            "ApiKey": f"{stash_api_key.value}"
         }
 
         for scene in scenes:
@@ -979,7 +979,7 @@ def populate_from_stash_thread():
             """
 
             response = requests.post(stash_endpoint.value, json={'query': query}, headers={
-                "Authorization": f"Apikey {stash_api_key.value}",
+                "ApiKey": f"{stash_api_key.value}",
                 "Content-Type": "application/json"
             })
 
