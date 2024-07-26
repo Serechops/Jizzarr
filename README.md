@@ -3,6 +3,10 @@
 ## Introduction
 Jizzarr is a web application designed to manage and organize adult content metadata. It has the ability to integrate with both TPDB and Stash.
 
+## Releases
+
+Please check the [Releases](https://github.com/Serechops/Jizzarr/releases) page for the latest Jizzarr binaries.
+
 ## Key Features
 
 1. API Integration
