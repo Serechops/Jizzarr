@@ -1428,7 +1428,7 @@ def scan_libraries():
 
 if __name__ == '__main__':
     def on_clicked(icon, item):
-        if item.text == "Open App":
+        if item.text == "Open Jizzarr":
             webbrowser.open("http://127.0.0.1:6900")
         elif item.text == "Quit":
             icon.stop()
@@ -1440,7 +1440,7 @@ if __name__ == '__main__':
         icon.icon = Image.open(icon_path)
         icon.title = "Jizzarr"
         icon.menu = pystray.Menu(
-            pystray.MenuItem("Open App", on_clicked),
+            pystray.MenuItem("Open Jizzarr", on_clicked),
             pystray.MenuItem("Quit", on_clicked)
         )
         icon.run()
