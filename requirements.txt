@@ -11,3 +11,5 @@ moviepy==1.0.3
 watchdog==2.1.6
 Werkzeug==3.0.1
 Levenshtein==0.25.1
+aiohttp==3.9.5
+asyncio==3.4.3

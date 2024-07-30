@@ -10,7 +10,7 @@ from flask_cors import CORS
 from models import db, Config, Site, Scene, Log, LibraryDirectory
 import requests
 import uuid
-from sqlalchemy import func, text
+from sqlalchemy import func, text, event, case
 import datetime
 import logging
 from contextlib import contextmanager
@@ -24,7 +24,9 @@ import webbrowser
 from flask_sqlalchemy import SQLAlchemy
 from config import Config as AppConfig
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw 
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import subqueryload
 
 # Initialize the Flask application
 app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
@@ -182,48 +184,29 @@ def collection():
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-from sqlalchemy.orm import joinedload
 
 @app.route('/collection_data', methods=['GET'])
 def collection_data():
     try:
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 12))
-        logger.debug(f"Fetching sites for page {page} with {per_page} items per page")
 
-        sites_paginate = Site.query.paginate(page=page, per_page=per_page, error_out=False)
+        # Fetch all sites from the database
+        all_sites = Site.query.order_by(Site.id).all()
+        site_ids = [site.id for site in all_sites]
+
+        # Perform a single query to get the counts
+        scene_counts = db.session.query(
+            Scene.site_id,
+            func.count(Scene.id).label('total_scenes'),
+            func.sum(case((Scene.status == 'Found', 1), else_=0)).label('found_scenes')
+        ).filter(Scene.site_id.in_(site_ids)).group_by(Scene.site_id).all()
+
+        # Organize counts by site_id
+        counts_by_site = {count.site_id: {'total_scenes': count.total_scenes, 'found_scenes': count.found_scenes} for count in scene_counts}
+
         collection_data = []
-        delete_duplicate_scenes()
-
-        for site in sites_paginate.items:
-            logger.debug(f"Processing site: {site.name}")
-            scenes = Scene.query.options(joinedload(Scene.site)).filter_by(site_id=site.id).all()
-            total_scenes = len(scenes)
-            collected_scenes = len([scene for scene in scenes if scene.status == 'Found'])
-            scene_list = []
-            for scene in scenes:
-                scene_list.append({
-                    'id': scene.id,
-                    'title': scene.title,
-                    'date': scene.date,
-                    'duration': scene.duration,
-                    'image': scene.image,
-                    'performers': scene.performers,
-                    'status': scene.status or 'Missing',
-                    'local_path': scene.local_path,
-                    'year': scene.year,
-                    'episode_number': scene.episode_number,
-                    'slug': scene.slug,
-                    'overview': scene.overview,
-                    'credits': scene.credits,
-                    'release_date_utc': scene.release_date_utc,
-                    'images': scene.images,
-                    'trailer': scene.trailer,
-                    'genres': scene.genres,
-                    'foreign_guid': scene.foreign_guid,
-                    'foreign_id': scene.foreign_id,
-                    'url': scene.url  # Ensure this field is included
-                })
+        for site in all_sites:
+            total_scenes = counts_by_site.get(site.id, {}).get('total_scenes', 0)
+            found_scenes = counts_by_site.get(site.id, {}).get('found_scenes', 0)
             collection_data.append({
                 'site': {
                     'uuid': site.uuid,
@@ -236,22 +219,178 @@ def collection_data():
                     'logo': site.logo,
                     'home_directory': site.home_directory
                 },
-                'scenes': scene_list,
                 'total_scenes': total_scenes,
-                'collected_scenes': collected_scenes
+                'collected_scenes': found_scenes
             })
 
         response = {
             'collection_data': collection_data,
-            'total_pages': sites_paginate.pages,
-            'current_page': sites_paginate.page
+            'total_sites': len(all_sites)
         }
+
+        
 
         logger.info('Collection data retrieved successfully')
         return jsonify(response)
     except Exception as e:
         logger.error(f"Error retrieving collection data: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+
+@app.route('/site_scenes/<site_uuid>', methods=['GET'])
+def site_scenes(site_uuid):
+    try:
+        # Fetch site details from the database
+        site = Site.query.filter_by(uuid=site_uuid).first()
+        if not site:
+            return jsonify({"error": "Site not found"}), 404
+
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 100, type=int)
+
+        # Fetch scenes with pagination
+        scenes_query = Scene.query.filter_by(site_id=site.id)
+        total_scenes = scenes_query.count()
+        scenes = paginate_query(scenes_query, page, per_page).all()
+
+        scenes_data = []
+        for scene in scenes:
+            scenes_data.append({
+                'id': scene.id,
+                'title': scene.title,
+                'date': scene.date,
+                'duration': scene.duration,
+                'image': scene.image,
+                'performers': scene.performers,
+                'status': scene.status,
+                'local_path': scene.local_path,
+                'year': scene.year,
+                'episode_number': scene.episode_number,
+                'slug': scene.slug,
+                'overview': scene.overview,
+                'credits': scene.credits,
+                'release_date_utc': scene.release_date_utc,
+                'images': scene.images,
+                'trailer': scene.trailer,
+                'genres': scene.genres,
+                'foreign_guid': scene.foreign_guid,
+                'foreign_id': scene.foreign_id,
+                'url': scene.url
+            })
+
+        response = {
+            'site': {
+                'uuid': site.uuid,
+                'name': site.name,
+                'url': site.url,
+                'description': site.description,
+                'rating': site.rating,
+                'network': site.network,
+                'parent': site.parent,
+                'logo': site.logo,
+                'home_directory': site.home_directory
+            },
+            'scenes': scenes_data,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total_scenes': total_scenes
+            }
+        }
+
+        logger.info('Site scenes retrieved successfully')
+        return jsonify(response)
+    except Exception as e:
+        logger.error(f"Error retrieving site scenes: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+
+@app.route('/scenes_for_site/<site_uuid>', methods=['GET'])
+def scenes_for_site(site_uuid):
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 100, type=int)
+
+        scenes_query = Scene.query.filter_by(site_id=site_uuid)
+        total_scenes = scenes_query.count()
+        scenes = paginate_query(scenes_query, page, per_page).all()
+
+        scene_data = []
+        for scene in scenes:
+            scene_data.append({
+                'id': scene.id,
+                'title': scene.title,
+                'date': scene.date,
+                'duration': scene.duration,
+                'performers': scene.performers,
+                'status': scene.status,
+                'local_path': scene.local_path,
+                'foreign_guid': scene.foreign_guid,
+                'url': scene.url,
+                'image': scene.image,
+                'year': scene.year,
+                'episode_number': scene.episode_number,
+                'slug': scene.slug,
+                'overview': scene.overview,
+                'credits': scene.credits,
+                'release_date_utc': scene.release_date_utc,
+                'images': scene.images,
+                'trailer': scene.trailer,
+                'genres': scene.genres,
+                'foreign_id': scene.foreign_id
+            })
+
+        logger.info(f'Scenes for site {site_uuid} retrieved successfully')
+        return jsonify({
+            'scenes': scene_data,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total_scenes': total_scenes
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error retrieving scenes for site {site_uuid}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+import asyncio
+import aiohttp
+
+async def fetch_scenes(session, url, headers, site_uuid, page_scene, per_page_scene):
+    try:
+        async with session.get(url, headers=headers) as response:
+            if response.status != 200:
+                app.logger.error(f'Failed to fetch scenes for site UUID: {site_uuid} - {response.status}')
+                return []
+            response_json = await response.json()
+            fetched_scenes = response_json.get('data', [])
+            app.logger.info(f'Fetched {len(fetched_scenes)} scenes on page {page_scene} for site UUID: {site_uuid}')
+            return fetched_scenes
+    except Exception as e:
+        app.logger.error(f'Error fetching scenes for site UUID: {site_uuid} on page {page_scene}: {e}')
+        return []
+
+async def fetch_all_scenes(headers, site_uuid, per_page_scene):
+    scenes = []
+    page_scene = 1
+    async with aiohttp.ClientSession() as session:
+        while True:
+            url = f'https://api.theporndb.net/sites/{site_uuid}/scenes?page={page_scene}&per_page={per_page_scene}'
+            fetched_scenes = await fetch_scenes(session, url, headers, site_uuid, page_scene, per_page_scene)
+            if not fetched_scenes:
+                break
+            scenes.extend(fetched_scenes)
+            page_scene += 1
+    return scenes
+
+def sync_fetch_all_scenes(headers, site_uuid, per_page_scene):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(fetch_all_scenes(headers, site_uuid, per_page_scene))
 
 @app.route('/add_site', methods=['POST'])
 def add_site():
@@ -267,107 +406,133 @@ def add_site():
         except ValueError:
             rating = None
 
-    with session_scope() as session:
-        try:
-            existing_site = session.query(Site).filter_by(uuid=site_uuid).first()
+    tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
+    if not tpdb_api_key or not tpdb_api_key.value:
+        return jsonify({'error': 'TPDB API Key not configured'}), 500
 
-            if existing_site:
-                existing_site.name = data['site']['name']
-                existing_site.url = data['site']['url']
-                existing_site.description = data['site']['description']
-                existing_site.rating = rating
-                existing_site.network = data['site']['network']
-                existing_site.parent = data['site']['parent']
-                existing_site.logo = data['site'].get('logo', '')
+    headers = {'Authorization': f'Bearer {tpdb_api_key.value}'}
 
-                session.query(Scene).filter_by(site_id=existing_site.id).delete()
-                scenes = []
-                for scene_data in data['scenes']:
-                    title = scene_data.get('title')
-                    if not title:
-                        continue
+    try:
+        existing_site = Site.query.filter_by(uuid=site_uuid).first()
 
-                    performers = ', '.join([performer['Name'] for performer in scene_data['performers']]) if isinstance(scene_data['performers'], list) else scene_data['performers']
+        if existing_site:
+            existing_site.name = data['site']['name']
+            existing_site.url = data['site']['url']
+            existing_site.description = data['site']['description']
+            existing_site.rating = rating
+            existing_site.network = data['site']['network']
+            existing_site.parent = data['site']['parent']
+            existing_site.logo = data['site'].get('logo', '')
 
-                    if not session.query(Scene).filter_by(foreign_guid=scene_data['foreign_guid']).first():
-                        scene = Scene(
-                            site_id=existing_site.id,
-                            title=scene_data['title'],
-                            date=scene_data['date'],
-                            duration=scene_data['duration'],
-                            image=scene_data['image'],
-                            performers=performers,
-                            status=scene_data.get('status'),
-                            local_path=scene_data.get('local_path'),
-                            year=scene_data.get('year'),
-                            episode_number=scene_data.get('episode_number'),
-                            slug=scene_data.get('slug'),
-                            overview=scene_data.get('overview'),
-                            credits=scene_data.get('credits'),
-                            release_date_utc=scene_data.get('release_date_utc'),
-                            images=scene_data.get('images'),
-                            trailer=scene_data.get('trailer'),
-                            genres=scene_data.get('genres'),
-                            foreign_guid=scene_data.get('foreign_guid'),
-                            foreign_id=scene_data.get('foreign_id'),
-                            url=scene_data.get('url')
-                        )
-                        scenes.append(scene)
-                session.bulk_save_objects(scenes)
-                log_entry('INFO', f'Site and scenes updated successfully for site UUID: {site_uuid}')
-                return jsonify({'message': 'Site and scenes updated successfully!'}), 200
-            else:
-                site = Site(
-                    uuid=site_uuid,
-                    name=data['site']['name'],
-                    url=data['site']['url'],
-                    description=data['site']['description'],
-                    rating=rating,
-                    network=data['site']['network'],
-                    parent=data['site']['parent'],
-                    logo=data['site'].get('logo', '')
+            Site.query.filter_by(site_id=existing_site.id).delete()
+            scenes = []
+            per_page_scene = 250
+
+            fetched_scenes = sync_fetch_all_scenes(headers, site_uuid, per_page_scene)
+
+            for scene_data in fetched_scenes:
+                if not scene_data:
+                    app.logger.error(f"Found NoneType entry in scenes list for site UUID: {site_uuid}")
+                    continue
+
+                performers = ', '.join([performer['name'] for performer in scene_data.get('performers', [])])
+                existing_scene = Scene.query.filter_by(foreign_guid=scene_data.get('id')).first()
+
+                if existing_scene:
+                    app.logger.info(f"Scene with ForeignGuid {scene_data['id']} already exists. Skipping.")
+                    continue
+
+                new_scene = Scene(
+                    site_id=existing_site.id,
+                    title=scene_data.get('title'),
+                    date=scene_data.get('date'),
+                    duration=scene_data.get('duration'),
+                    image=scene_data.get('image', ''),
+                    performers=performers,
+                    status=scene_data.get('status', ''),
+                    local_path=scene_data.get('local_path', ''),
+                    year=scene_data.get('year', 0),
+                    episode_number=scene_data.get('episode_number', 0),
+                    slug=scene_data.get('slug', ''),
+                    overview=scene_data.get('overview', ''),
+                    credits=json.dumps(scene_data.get('credits', [])),
+                    release_date_utc=scene_data.get('release_date_utc', ''),
+                    images=json.dumps(scene_data.get('images', [])),
+                    trailer=scene_data.get('trailer', ''),
+                    genres=json.dumps(scene_data.get('genres', [])),
+                    foreign_guid=scene_data.get('id', ''),
+                    foreign_id=scene_data.get('foreign_id', 0),
+                    url=scene_data.get('url')
                 )
-                session.add(site)
-                session.commit()  # Ensure site is committed before adding scenes
+                scenes.append(new_scene)
 
-                scenes = []
-                for scene_data in data['scenes']:
-                    title = scene_data.get('title')
-                    if not title:
-                        continue
+            db.session.bulk_save_objects(scenes)
+            db.session.commit()
+            log_entry('INFO', f'Site and scenes updated successfully for site UUID: {site_uuid}')
+            return jsonify({'message': 'Site and scenes updated successfully!'}), 200
+        else:
+            site = Site(
+                uuid=site_uuid,
+                name=data['site']['name'],
+                url=data['site']['url'],
+                description=data['site']['description'],
+                rating=rating,
+                network=data['site']['network'],
+                parent=data['site']['parent'],
+                logo=data['site'].get('logo', '')
+            )
+            db.session.add(site)
+            db.session.flush()  # Ensure site is committed before adding scenes
 
-                    performers = ', '.join([performer['Name'] for performer in scene_data['performers']]) if isinstance(scene_data['performers'], list) else scene_data['performers']
+            scenes = []
+            per_page_scene = 250
 
-                    if not session.query(Scene).filter_by(foreign_guid=scene_data['foreign_guid']).first():
-                        scene = Scene(
-                            site_id=site.id,
-                            title=scene_data['title'],
-                            date=scene_data['date'],
-                            duration=scene_data['duration'],
-                            image=scene_data['image'],
-                            performers=performers,
-                            status=scene_data.get('status'),
-                            local_path=scene_data.get('local_path'),
-                            year=scene_data.get('year'),
-                            episode_number=scene_data.get('episode_number'),
-                            slug=scene_data.get('slug'),
-                            overview=scene_data.get('overview'),
-                            credits=scene_data.get('credits'),
-                            release_date_utc=scene_data.get('release_date_utc'),
-                            images=scene_data.get('images'),
-                            trailer=scene_data.get('trailer'),
-                            genres=scene_data.get('genres'),
-                            foreign_guid=scene_data.get('foreign_guid'),
-                            foreign_id=scene_data.get('foreign_id'),
-                            url=scene_data.get('url')
-                        )
-                        scenes.append(scene)
-                session.bulk_save_objects(scenes)
-                log_entry('INFO', f'Site and scenes added successfully for site UUID: {site_uuid}')
-                return jsonify({'message': 'Site and scenes added successfully!'}), 201
-        except SQLAlchemyError as e:
-            log_entry('ERROR', f"Database error occurred: {e}")
-            return jsonify({'error': 'Database error occurred'}), 500
+            fetched_scenes = sync_fetch_all_scenes(headers, site_uuid, per_page_scene)
+
+            for scene_data in fetched_scenes:
+                if not scene_data:
+                    app.logger.error(f"Found NoneType entry in scenes list for site UUID: {site_uuid}")
+                    continue
+
+                performers = ', '.join([performer['name'] for performer in scene_data.get('performers', [])])
+                existing_scene = Scene.query.filter_by(foreign_guid=scene_data.get('id')).first()
+
+                if existing_scene:
+                    app.logger.info(f"Scene with ForeignGuid {scene_data['id']} already exists. Skipping.")
+                    continue
+
+                new_scene = Scene(
+                    site_id=site.id,
+                    title=scene_data.get('title'),
+                    date=scene_data.get('date'),
+                    duration=scene_data.get('duration'),
+                    image=scene_data.get('image', ''),
+                    performers=performers,
+                    status=scene_data.get('status', ''),
+                    local_path=scene_data.get('local_path', ''),
+                    year=scene_data.get('year', 0),
+                    episode_number=scene_data.get('episode_number', 0),
+                    slug=scene_data.get('slug', ''),
+                    overview=scene_data.get('overview', ''),
+                    credits=json.dumps(scene_data.get('credits', [])),
+                    release_date_utc=scene_data.get('release_date_utc', ''),
+                    images=json.dumps(scene_data.get('images', [])),
+                    trailer=scene_data.get('trailer', ''),
+                    genres=json.dumps(scene_data.get('genres', [])),
+                    foreign_guid=scene_data.get('id', ''),
+                    foreign_id=scene_data.get('foreign_id', 0),
+                    url=scene_data.get('url')
+                )
+                scenes.append(new_scene)
+
+            db.session.bulk_save_objects(scenes)
+            db.session.commit()
+            log_entry('INFO', f'Site and scenes added successfully for site UUID: {site_uuid}')
+            return jsonify({'message': 'Site and scenes added successfully!'}), 201
+    except Exception as e:
+        log_entry('ERROR', f"Error adding site: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/remove_site/<string:site_uuid>', methods=['DELETE'])
 def remove_site(site_uuid):
@@ -400,6 +565,7 @@ def remove_site(site_uuid):
     except Exception as e:
         log_entry('ERROR', f"Error removing site: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/remove_scene/<int:scene_id>', methods=['DELETE'])
 def remove_scene(scene_id):
@@ -1431,6 +1597,66 @@ def scan_libraries():
     except Exception as e:
         log_entry('ERROR', f"Error during manual scan for library changes: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Set up logging to capture log records in a list
+log_records = []
+
+class ListHandler(logging.Handler):
+    def emit(self, record):
+        log_records.append(self.format(record))
+
+list_handler = ListHandler()
+logging.getLogger().addHandler(list_handler)
+
+# Log all SQL statements
+@event.listens_for(Engine, "before_cursor_execute")
+def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    logger.info(f"Start Query: {statement}")
+    logger.info(f"Parameters: {parameters}")
+
+@event.listens_for(Engine, "after_cursor_execute")
+def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    logger.info(f"End Query: {statement}")
+
+# Log commits
+@event.listens_for(Engine, "commit")
+def commit(conn):
+    logger.info("Commit")
+
+# Log rollbacks
+@event.listens_for(Engine, "rollback")
+def rollback(conn):
+    logger.info("Rollback")
+
+@app.route('/db_logs')
+def db_logs():
+    return render_template_string("""
+        <html>
+            <head>
+                <title>Database Logs</title>
+            </head>
+            <body>
+                <h1>Database Logs</h1>
+                <pre>{{ logs }}</pre>
+            </body>
+        </html>
+    """, logs="\n".join(log_records))
+
+@app.route('/scenes_data', methods=['GET'])
+def scenes_data():
+    try:
+        site_uuid = request.args.get('site_uuid')
+        site = Site.query.filter_by(uuid=site_uuid).first()
+        if not site:
+            raise ValueError('Site not found')
+        
+        scenes = Scene.query.filter_by(site_id=site.id).all()
+        scenes_data = [scene.to_dict() for scene in scenes]
+
+        return jsonify({'scenes': scenes_data})
+    except Exception as e:
+        logger.error(f"Error retrieving scenes data: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     def on_clicked(icon, item):

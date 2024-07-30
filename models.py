@@ -69,10 +69,34 @@ class Scene(db.Model):
         self.foreign_id = foreign_id
         self.url = url
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'site_id': self.site_id,
+            'title': self.title,
+            'date': self.date,
+            'duration': self.duration,
+            'image': self.image,
+            'performers': self.performers,
+            'status': self.status,
+            'local_path': self.local_path,
+            'year': self.year,
+            'episode_number': self.episode_number,
+            'slug': self.slug,
+            'overview': self.overview,
+            'credits': self.credits,
+            'release_date_utc': self.release_date_utc,
+            'images': self.images,
+            'trailer': self.trailer,
+            'genres': self.genres,
+            'foreign_guid': self.foreign_guid,
+            'foreign_id': self.foreign_id,
+            'url': self.url,
+        }
+
 class LibraryDirectory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     path = db.Column(db.String, nullable=False, unique=True)
-    
 
 # Configure mappers to use confirm_deleted_rows=False
 configure_mappers()
