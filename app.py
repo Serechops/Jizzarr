@@ -251,6 +251,10 @@ def collection_data():
         return jsonify({"error": str(e)}), 500
 
 
+
+def paginate_query(query, page, per_page):
+    return query.limit(per_page).offset((page - 1) * per_page)
+
 @app.route('/site_scenes/<site_uuid>', methods=['GET'])
 def site_scenes(site_uuid):
     try:
@@ -319,6 +323,8 @@ def site_scenes(site_uuid):
         logger.error(f"Error retrieving site scenes: {e}")
         return jsonify({"error": str(e)}), 500
 
+def paginate_query(query, page, per_page):
+    return query.limit(per_page).offset((page - 1) * per_page)
 
 @app.route('/scenes_for_site/<site_uuid>', methods=['GET'])
 def scenes_for_site(site_uuid):
@@ -943,126 +949,6 @@ def search_stash_for_matches():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/find_scene_url', methods=['POST'])
-def find_scene_url():
-    logger.info('Received request to find scene URL')
-    data = request.get_json()
-    foreign_guid = data.get('scene_uuid')
-
-    if not foreign_guid:
-        logger.error('Foreign GUID is required but not provided')
-        return jsonify({"error": "Foreign GUID is required"}), 400
-
-    try:
-        tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
-        if not tpdb_api_key:
-            logger.error('TPDB API Key not configured')
-            return jsonify({'error': 'TPDB API Key not configured'}), 500
-
-        api_key = tpdb_api_key.value
-        api_url = f"https://api.theporndb.net/scenes/{foreign_guid}"
-        headers = {
-            'Authorization': f'Bearer {api_key}'
-        }
-
-        logger.debug(f'Requesting URL: {api_url} with headers: {headers}')
-        response = requests.get(api_url, headers=headers)
-
-        if response.status_code == 200:
-            data = response.json().get('data', {})
-            scene_url = data.get('url')
-            if scene_url:
-                logger.info(f'Scene URL found: {scene_url} for foreign GUID: {foreign_guid}')
-
-                # Save the URL to the database
-                scene = Scene.query.filter_by(foreign_guid=foreign_guid).first()
-                if scene:
-                    scene.url = scene_url
-                    db.session.commit()
-
-                return jsonify({"url": scene_url})
-            else:
-                logger.warning(f'URL not found in the response for foreign GUID: {foreign_guid}')
-                return jsonify({"error": "URL not found in the response"}), 404
-        else:
-            logger.error(f'Failed to fetch data. HTTP Status code: {response.status_code}')
-            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
-
-    except Exception as e:
-        logger.exception(f'Error finding scene URL: {e}')
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/save_scene_url', methods=['POST'])
-def save_scene_url():
-    try:
-        data = request.json
-        scene_uuid = data.get('scene_uuid')
-        url = data.get('url')
-
-        scene = Scene.query.filter_by(foreign_guid=scene_uuid).first()
-        if not scene:
-            return jsonify({'error': 'Scene not found'}), 404
-
-        scene.url = url
-        db.session.commit()
-
-        return jsonify({'message': 'Scene URL saved successfully!'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/get_scene_details', methods=['POST'])
-def get_scene_details():
-    data = request.json
-    scene_uuid = data.get('scene_uuid')
-
-    app.logger.info(f"Received request to get details for scene UUID: {scene_uuid}")
-
-    tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
-
-    if not scene_uuid:
-        app.logger.error("Scene UUID is missing in the request")
-        return jsonify({"error": "Scene UUID is required"}), 400
-
-    if not tpdb_api_key or not tpdb_api_key.value:
-        app.logger.error("TPDB API key is not configured")
-        return jsonify({"error": "TPDB API key is not configured"}), 500
-
-    try:
-        api_url = f"https://api.theporndb.net/scenes/{scene_uuid}"
-        headers = {
-            'Authorization': f'Bearer {tpdb_api_key.value}'
-        }
-
-        app.logger.info(f"Making request to TPDB API: {api_url} with headers: {headers}")
-        response = requests.get(api_url, headers=headers)
-
-        if response.status_code == 200:
-            data = response.json().get('data', {})
-            scene_url = data.get('url')
-            app.logger.info(f"Received data from TPDB API: {data}")
-
-            if scene_url:
-                scene = Scene.query.filter_by(foreign_guid=scene_uuid).first()
-                if scene:
-                    scene.url = scene_url
-                    db.session.commit()
-                    app.logger.info(f"Scene URL saved and found: {scene_url} for scene UUID: {scene_uuid}")
-                else:
-                    app.logger.warning(f"Scene with UUID {scene_uuid} not found in the database")
-                return jsonify({"url": scene_url})
-            else:
-                app.logger.error("URL not found in the response from TPDB API")
-                return jsonify({"error": "URL not found in the response"}), 404
-        else:
-            app.logger.error(f"Failed to fetch data from TPDB API. HTTP Status code: {response.status_code}")
-            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
-
-    except Exception as e:
-        app.logger.error(f"Exception occurred while fetching scene details: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
 
 @app.route('/get_site_uuid', methods=['POST'])
 def get_site_uuid():
@@ -1499,38 +1385,6 @@ def fetch_metadata_from_file(file_path):
     except Exception as e:
         logger.error(f"Failed to fetch metadata from {file_path}: {e}")
         return None
-
-
-# Global variable to keep track of the process state
-stop_get_all_urls = False
-
-
-@app.route('/stop_get_all_urls', methods=['POST'])
-def stop_get_all_urls():
-    global stop_get_all_urls
-    stop_get_all_urls = True
-    return jsonify({'message': 'Get All URLs process stopped'}), 200
-
-
-@app.route('/get_all_urls', methods=['POST'])
-def get_all_urls():
-    global stop_get_all_urls
-    stop_get_all_urls = False
-    urls_added = 0
-
-    try:
-        for scene in currentScenes:
-            if stop_get_all_urls:
-                break
-
-            if not scene.url:
-                url_found = find_scene_url(scene.foreign_guid)
-                if url_found:
-                    urls_added += 1
-
-        return jsonify({'message': f'URLs added for {urls_added} scenes'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 # Global variable to keep track of the process state
