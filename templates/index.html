@@ -12,8 +12,18 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.min.js"></script>
+    <style>
+        .modal-body {
+            max-height: 800px;
+            overflow-y: auto;
+        }
+        .list-group-item p strong {
+        color: #28a745;
+        font-weight: bold;
+        }
+    </style>
 </head>
-<body>
+<body class="bg-dark text-light">
     <nav class="custom-navbar">
         <a href="{{ url_for('index') }}">
             <img src="{{ url_for('static', filename='favicon.ico') }}" alt="Favicon" class="favicon">
@@ -30,7 +40,11 @@
             <input type="text" class="form-control form-control-dark" id="search-input" placeholder="Enter site name">
             <button class="btn btn-primary-dark mt-2 w-100" id="search-button">Search</button>
             <button id="search-stash" data-state="start" class="btn btn-primary-dark mt-2 w-100">
-            <i class="fa fa-play"></i> Populate Sites from Stash
+                <i class="fa fa-play"></i> Populate Sites from Stash
+            </button>
+            <button id="search-all-sites-stash" class="btn btn-primary-dark mt-2 w-100">
+                <i class="fa fa-sync"></i> Search All Sites for Matches
+            </button>
         </div>
         <div id="search-results" class="row row-cols-1 row-cols-md-3 g-4"></div>
         <div id="site-details" class="mt-4"></div>
@@ -38,22 +52,44 @@
         <div id="scenes-grid" class="mt-4"></div>
         <div id="pagination" class="mt-4"></div>
     </div>
+
+    <!-- Progress Bar -->
     <div id="progress-bar-container">
         <img id="stash-logo" src="{{ url_for('static', filename='stash.png') }}" alt="Stash Logo">
         <div id="progress-bar">
             <div id="progress-bar-inner">0%</div>
         </div>
     </div>
+
+    <!-- Modal for displaying matched scenes -->
+    <div class="modal fade" id="matchesModal" tabindex="-1" aria-labelledby="matchesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="matchesModalLabel">Matched Scenes Review</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="matches-list" class="list-group list-group-flush"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
-        let stopPopulateSites = false;
-
         document.addEventListener('DOMContentLoaded', function() {
             const searchStashButton = document.getElementById('search-stash');
             const progressBarContainer = document.getElementById('progress-bar-container');
             const progressBarInner = document.getElementById('progress-bar-inner');
+            const searchAllSitesButton = document.getElementById('search-all-sites-stash');
+            const matchesModal = new bootstrap.Modal(document.getElementById('matchesModal'));
+            const matchesList = document.getElementById('matches-list');
 
             searchStashButton.addEventListener('click', async function() {
                 const currentState = searchStashButton.getAttribute('data-state');
@@ -113,6 +149,63 @@
                     searchStashButton.classList.add('btn-primary-dark');
                 }
             }
+
+            searchAllSitesButton.addEventListener('click', async function() {
+                try {
+                    const response = await fetch('/search_stash_for_all_sites', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Error ${response.status}: ${await response.text()}`);
+                    }
+
+                    const matches = await response.json();
+                    console.log('All site matches:', matches);
+
+                    // Populate the modal with match details
+                    matchesList.innerHTML = ''; // Clear previous matches
+                    if (matches.length > 0) {
+                        matches.forEach(match => {
+                            const matchItem = document.createElement('a');
+                            matchItem.classList.add('list-group-item', 'list-group-item-action', 'bg-dark', 'text-light');
+                            matchItem.innerHTML = `
+                                <h5>${match.site_name}: ${match.scene_title}</h5>
+                                <p><strong>Matched File Path:</strong> ${match.matched_file_path}</p>
+                            `;
+                            matchesList.appendChild(matchItem);
+                        });
+                    } else {
+                        matchesList.innerHTML = '<p class="text-center">No matches found.</p>';
+                    }
+
+                    // Show the modal
+                    matchesModal.show();
+
+                    // Display success message or process matches as needed
+                    Toastify({
+                        text: 'Stash search completed for all sites',
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+                } catch (error) {
+                    console.error('Error searching stash for all sites:', error);
+                    Toastify({
+                        text: 'Error searching stash for all sites: ' + error.message,
+                        duration: 3000,
+                        close: true,
+                        gravity: "top",
+                        position: "right",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                    }).showToast();
+                }
+            });
 
             async function stopPopulateSitesProcess() {
                 try {

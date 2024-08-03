@@ -629,14 +629,15 @@ def set_home_directory():
     log_entry('INFO', f'Home directory set successfully for site UUID: {site_uuid}')
     return jsonify({'message': 'Home directory set successfully!'})
 
-from moviepy.editor import VideoFileClip
+import ffmpeg
 
 def get_file_duration(file_path):
     try:
         file_extension = os.path.splitext(file_path)[1].lower()
         if file_extension in ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']:
-            video = VideoFileClip(file_path)
-            return video.duration / 60  # convert seconds to minutes
+            probe = ffmpeg.probe(file_path)
+            duration = float(probe['format']['duration'])
+            return duration / 60  # convert seconds to minutes
         else:
             print(f"Unsupported file format for file {file_path}")
     except Exception as e:
@@ -1656,6 +1657,149 @@ def scenes_data():
         return jsonify({'scenes': scenes_data})
     except Exception as e:
         logger.error(f"Error retrieving scenes data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/search_stash_for_all_sites', methods=['POST'])
+def search_stash_for_all_sites():
+    try:
+        # Fetch config values
+        stash_endpoint = Config.query.filter_by(key='stashEndpoint').first()
+        stash_api_key = Config.query.filter_by(key='stashApiKey').first()
+
+        app.logger.debug(f"Stash Endpoint: {stash_endpoint}")
+        app.logger.debug(f"Stash API Key: {stash_api_key}")
+
+        # Check if both stash_endpoint and stash_api_key are configured
+        if not stash_endpoint or not stash_api_key:
+            log_entry('ERROR', 'Stash endpoint or API key not configured')
+            return jsonify({'error': 'Stash endpoint or API key not configured'}), 500
+
+        # Prepare headers and endpoint for the API request
+        local_endpoint = stash_endpoint.value
+        local_headers = {
+            "Accept-Encoding": "gzip, deflate, br",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "ApiKey": f"{stash_api_key.value}"
+        }
+
+        app.logger.debug(f"Local Endpoint: {local_endpoint}")
+        app.logger.debug(f"Headers: {local_headers}")
+
+        # GraphQL query to find all scenes with the specified endpoint
+        query = """
+            query FindScenes {
+                findScenes(
+                    scene_filter: {
+                        stash_id_endpoint: {
+                            endpoint: "https://theporndb.net/graphql"
+                            modifier: INCLUDES
+                        }
+                    }
+                    filter: { per_page: -1, direction: ASC }
+                ) {
+                    scenes {
+                        files {
+                            path
+                        }
+                        stash_ids {
+                            endpoint
+                            stash_id
+                        }
+                    }
+                }
+            }
+        """
+
+        app.logger.debug(f"GraphQL Query: {query}")
+
+        # Make the API request
+        response = requests.post(local_endpoint, json={"query": query}, headers=local_headers)
+
+        # Log the status code and response content
+        app.logger.debug(f"Response Status Code: {response.status_code}")
+        app.logger.debug(f"Response Content: {response.content.decode('utf-8')}")
+
+        # Check if the response is successful
+        if response.status_code != 200:
+            log_entry('ERROR', f"Failed to fetch data from Stash: {response.status_code} - {response.text}")
+            return jsonify({"error": f"Failed to fetch data from Stash: {response.status_code}"}), response.status_code
+
+        # Parse the JSON response
+        result = response.json()
+
+        # Validate the structure of the response
+        if not result or 'data' not in result or 'findScenes' not in result['data']:
+            app.logger.debug(f"Unexpected Result Structure: {result}")
+            log_entry('ERROR', 'Invalid or unexpected response structure from Stash')
+            return jsonify({"error": "Invalid response structure from Stash"}), 500
+
+        # Extract scenes from the response
+        stash_scenes = result.get('data', {}).get('findScenes', {}).get('scenes', [])
+        
+        app.logger.debug(f"Number of Scenes Retrieved from Stash: {len(stash_scenes)}")
+
+        # If no scenes are found, log the information and return
+        if not stash_scenes:
+            log_entry('INFO', 'No scenes found in Stash with the specified endpoint')
+            return jsonify({'message': 'No scenes found in Stash with the specified endpoint'}), 200
+
+        all_matches = []
+
+        # Iterate over each scene retrieved from Stash
+        for stash_scene in stash_scenes:
+            stash_ids = stash_scene.get('stash_ids', [])
+            files = stash_scene.get('files', [])
+
+            app.logger.debug(f"Processing Scene: {stash_scene}")
+            if not files:
+                app.logger.debug("Skipping scene due to missing files.")
+                continue  # Skip if there are no files associated with this scene
+
+            for stash_id_info in stash_ids:
+                if stash_id_info.get('endpoint') == "https://theporndb.net/graphql":
+                    stash_id = stash_id_info.get('stash_id')
+                    file_path = files[0].get('path')
+
+                    app.logger.debug(f"Stash ID: {stash_id}, File Path: {file_path}")
+
+                    if not stash_id or not file_path:
+                        app.logger.debug("Skipping due to missing stash_id or file_path.")
+                        continue
+
+                    # Look for a matching scene in the local database by foreign_guid
+                    local_scene = Scene.query.filter_by(foreign_guid=stash_id).first()
+                    app.logger.debug(f"Matching Local Scene: {local_scene}")
+
+                    if local_scene:
+                        # Update the local scene with the file path
+                        local_scene.local_path = file_path
+                        local_scene.status = 'Found'
+                        db.session.commit()
+
+                        # Add the match to the results
+                        all_matches.append({
+                            'scene_id': local_scene.id,
+                            'site_id': local_scene.site_id,
+                            'site_name': local_scene.site.name,
+                            'matched_scene_id': stash_id,
+                            'matched_title': local_scene.title,
+                            'matched_file_path': file_path,
+                            'foreign_guid': stash_id,
+                            'scene_title': local_scene.title,
+                            'scene_date': local_scene.date,
+                            'scene_duration': local_scene.duration,
+                            'scene_performers': local_scene.performers,
+                            'scene_status': local_scene.status,
+                            'scene_local_path': local_scene.local_path
+                        })
+
+        log_entry('INFO', 'Stash matches searched and updated successfully for all sites')
+        return jsonify(all_matches)
+
+    except Exception as e:
+        app.logger.error(f"Exception occurred: {e}", exc_info=True)
+        log_entry('ERROR', f"Error searching stash for matches across all sites: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

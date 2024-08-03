@@ -277,7 +277,6 @@
             box-sizing: border-box; /* Ensure padding and border are included in the element's total width and height */
         }
 
-
         @media (max-width: 768px) {
             .container {
                 padding: 10px;

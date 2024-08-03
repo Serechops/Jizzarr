@@ -26,10 +26,14 @@
         <div class="mb-3">
             <input type="text" id="search-input" class="form-control" placeholder="Search by site name...">
         </div>
-        <div class="d-flex justify-content-between mb-3">
-            <button id="sort-asc" class="btn btn-secondary">Sort A-Z</button>
-            <button id="sort-desc" class="btn btn-secondary">Sort Z-A</button>
+        <div class="d-flex justify-content-start mb-3 button-container">
+        <div class="d-flex flex-column align-items-start">
+            <button id="sort-asc" class="btn btn-secondary mb-2">Sort A-Z</button>
+            <button id="sort-desc" class="btn btn-secondary mb-2">Sort Z-A</button>
         </div>
+    </div>
+        <button id="filter-matched-sites" class="btn btn-primary mb-2">Show Only Matched Sites</button>
+        <center><h5>Site Pages</h5></center>
         <center><span id="site-page-info" class="mx-2"></span></center>
         <div class="pagination-controls d-flex justify-content-center mt-4">
             <button id="site-first-page" class="btn btn-outline-secondary me-2">First</button>
@@ -53,6 +57,9 @@
                         <option value="25">25</option>
                         <option value="50">50</option>
                         <option value="100" selected>100</option>
+                        <option value="250">250</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
                     </select>
                 </div>
                 <button id="toggle-matches" class="btn btn-primary">Show Only Matched Scenes</button>
@@ -61,9 +68,7 @@
                 <button id="match-by-uuid-button" class="btn btn-primary">Match by UUID</button>
                 <button id="bulk-update-button" class="btn btn-primary">Bulk Update Matches</button>
                 <button id="search-stash-button" class="btn btn-primary">Search Stash for Matches</button>
-                <button id="get-all-urls-button" class="btn btn-primary" data-state="start">
-                <i class="fa fa-play"></i> Get All Scene URLs
-                </button>
+                <button id="copy-all-urls-button" class="btn btn-primary">Copy All URLs to Clipboard</button>
             </div>
             <div id="compare-container" class="compare-container mt-3">
                 <h4>Current Home Directory:</h4>
@@ -71,7 +76,15 @@
             </div>
             <div class="mb-3">
                 <input type="text" id="performer-search-input" class="form-control" placeholder="Search by performer name...">
-            </div>      
+            </div>
+            <center><h5>Scene Pages:</h5></center>
+            <center><span id="scene-page-info" class="mx-2"></span></center>
+            <div class="pagination-controls d-flex justify-content-center mt-4">
+                <button id="scene-first-page" class="btn btn-outline-secondary me-2">First</button>
+                <button id="scene-prev-page" class="btn btn-outline-secondary me-2">Prev</button>
+                <button id="scene-next-page" class="btn btn-outline-secondary me-2">Next</button>
+                <button id="scene-last-page" class="btn btn-outline-secondary">Last</button>
+            </div>            
             <table class="table table-dark-mode">
                 <thead>
                     <tr>
@@ -88,14 +101,6 @@
                 </thead>
                 <tbody id="scene-table-body"></tbody>
             </table>
-            <div class="pagination-controls d-flex justify-content-center mt-4">
-                <button id="scene-first-page" class="btn btn-outline-secondary me-2">First</button>
-                <button id="scene-prev-page" class="btn btn-outline-secondary me-2">Prev</button>
-                <button id="scene-next-page" class="btn btn-outline-secondary me-2">Next</button>
-                <button id="scene-last-page" class="btn btn-outline-secondary">Last</button>
-            </div>
-            <h4>Status Log</h4>
-            <div id="status"></div>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/js/bootstrap.bundle.min.js"></script>
@@ -138,6 +143,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const getAllUrlsButton = document.getElementById('get-all-urls-button');
     const performerSearchInput = document.getElementById('performer-search-input');
     const sitePageInfo = document.getElementById('site-page-info');
+    const filterMatchedSitesButton = document.getElementById('filter-matched-sites');
+    const searchInputContainer = document.querySelector('.mb-3');
+    const buttonContainer = document.querySelector('.button-container');
+    const sitePaginationControls = document.querySelector('.pagination-controls');
+    const siteASCPaginationControls = document.querySelector('button#sort-asc');
+    const siteDESCPaginationControls = document.querySelector('button#sort-desc');
+    const siteFIRSTPaginationControls = document.querySelector('button#site-first-page');
+    const siteNEXTPaginationControls = document.querySelector('button#site-next-page');
+    const sitePREVPaginationControls = document.querySelector('button#site-prev-page');
+    const siteLASTPaginationControls = document.querySelector('button#site-last-page');
+    const sitePagesHeading = document.querySelector('center > h5');
+    const copyAllUrlsButton = document.getElementById('copy-all-urls-button');
     
     let filteredScenes = [];
     let selectedDirectoryPath = '';
@@ -155,7 +172,97 @@ document.addEventListener('DOMContentLoaded', function() {
     let excludedMatches = new Set();
     let totalPages = 1;
     let totalScenePages = 1;
+    let showOnlyMatchedSites = false;
+    
+    function handleSiteCardClick() {
+        // Hide site-related elements
+        searchInputContainer.style.display = 'none';
+        buttonContainer.style.display = 'none';
+        sitePaginationControls.style.display = 'none';
+        siteASCPaginationControls.style.display = 'none';
+        siteDESCPaginationControls.style.display = 'none';
+        sitePageInfo.style.display = 'none';
+        sitePagesHeading.style.display = 'none';
+        filterMatchedSitesButton.style.display = 'none';
+        
+        // Show scene-related elements
+        siteCollectionContainer.classList.add('d-none');
+        sceneCollectionContainer.classList.remove('d-none');
+        
+        // Update scenes for the clicked site
+        fetchScenesForSite(currentSiteUuid).then(scenes => {
+            showScenesForSite(scenes);
+        }).catch(error => {
+            console.error('Error fetching scenes for site:', error);
+            showScenesForSite([]);
+        });
+    }
+    
+    backButton.addEventListener('click', () => {
+        // Show site-related elements
+        searchInputContainer.style.display = '';
+        buttonContainer.style.display = '';
+        sitePaginationControls.style.display = '';
+        siteASCPaginationControls.style.display = '';
+        siteDESCPaginationControls.style.display = '';
+        siteFIRSTPaginationControls.style.display = '';
+        siteNEXTPaginationControls.style.display = '';
+        sitePREVPaginationControls.style.display = '';
+        siteLASTPaginationControls.style.display = '';
+        sitePageInfo.style.display = '';
+        sitePagesHeading.style.display = '';
+        filterMatchedSitesButton.style.display = '';
+        
+        // Hide scene-related elements
+        siteCollectionContainer.classList.remove('d-none');
+        sceneCollectionContainer.classList.add('d-none');
+    });
 
+     copyAllUrlsButton.addEventListener('click', function() {
+        let urls = [];
+        const sceneTableRows = document.querySelectorAll('#scene-table-body tr');
+        
+        sceneTableRows.forEach(row => {
+            const sceneUrlElement = row.querySelector('td:last-child a'); // Target the Scene URL specifically
+            if (sceneUrlElement && sceneUrlElement.href) {
+                urls.push(sceneUrlElement.href);
+            }
+        });
+
+        if (urls.length > 0) {
+            const urlsText = urls.join('\n');
+            navigator.clipboard.writeText(urlsText).then(() => {
+                Toastify({
+                    text: 'All Scene URLs copied to clipboard!',
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                }).showToast();
+            }).catch(err => {
+                console.error('Error copying Scene URLs to clipboard:', err);
+                Toastify({
+                    text: 'Error copying Scene URLs to clipboard: ' + err.message,
+                    duration: 3000,
+                    close: true,
+                    gravity: "top",
+                    position: "right",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+                }).showToast();
+            });
+        } else {
+            Toastify({
+                text: 'No Scene URLs found to copy!',
+                duration: 3000,
+                close: true,
+                gravity: "top",
+                position: "right",
+                backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
+            }).showToast();
+        }
+    });
+    
     setHomeDirectoryButton.addEventListener('click', function() {
         const input = document.createElement('input');
         input.type = 'text';
@@ -718,23 +825,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }).showToast();
         }
     }
+    
+    filterMatchedSitesButton.addEventListener('click', () => {
+        showOnlyMatchedSites = !showOnlyMatchedSites;
+        filterMatchedSitesButton.textContent = showOnlyMatchedSites ? 'Show All Sites' : 'Show Only Matched Sites';
+        displayCollection();
+    });
 
 
     function displayCollection(page = 1, filteredCollection = null) {
         siteCollectionContainer.innerHTML = '';
-    
-        const collectionData = filteredCollection || allSites;
+
+        let collectionData = filteredCollection || allSites;
+        
+        if (showOnlyMatchedSites) {
+            collectionData = collectionData.filter(site => site.collected_scenes > 0);
+        }
+
         totalPages = Math.ceil(collectionData.length / sitesPerPage);
         currentPage = page;
-    
+
         const paginatedSites = collectionData.slice((page - 1) * sitesPerPage, page * sitesPerPage);
-    
+
         paginatedSites.forEach(item => {
             const totalScenes = item.total_scenes;
             const collectedScenes = item.collected_scenes;
             const progressPercentage = totalScenes > 0 ? (collectedScenes / totalScenes) * 100 : 0;
             const logoUrl = item.site.logo;
-    
+
             const siteCard = document.createElement('div');
             siteCard.classList.add('col-md-4');
             siteCard.innerHTML = `
@@ -755,27 +873,43 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             `;
-    
-            siteCard.addEventListener('click', () => {
-                currentSiteUuid = item.site.uuid;
-                homeDirectory = item.site.home_directory || '';
-                homeDirectoryDisplay.textContent = homeDirectory;
-                siteLogoContainer.innerHTML = logoUrl ? `<img src="${logoUrl}" alt="${item.site.name}">` : '';
-                siteTitleContainer.innerText = item.site.name;
-                siteCollectionContainer.classList.add('d-none');
-                sceneCollectionContainer.classList.remove('d-none');
-                
-                fetchScenesForSite(item.site.uuid).then(scenes => {
-                    showScenesForSite(scenes);
-                }).catch(error => {
-                    console.error('Error fetching scenes for site:', error);
-                    showScenesForSite([]);
-                });
+
+        siteCard.addEventListener('click', () => {
+            currentSiteUuid = item.site.uuid;
+            homeDirectory = item.site.home_directory || '';
+            homeDirectoryDisplay.textContent = homeDirectory;
+            siteLogoContainer.innerHTML = logoUrl ? `<img src="${logoUrl}" alt="${item.site.name}">` : '';
+            siteTitleContainer.innerText = item.site.name;
+            
+            // Hide site-related elements
+            searchInputContainer.style.display = 'none';
+            buttonContainer.style.display = 'none';
+            sitePaginationControls.style.display = 'none';
+            siteASCPaginationControls.style.display = 'none';
+            siteDESCPaginationControls.style.display = 'none';
+            siteFIRSTPaginationControls.style.display = 'none';
+            sitePREVPaginationControls.style.display = 'none'; 
+            siteNEXTPaginationControls.style.display = 'none';
+            siteLASTPaginationControls.style.display = 'none';            
+            sitePageInfo.style.display = 'none';
+            sitePagesHeading.style.display = 'none';
+            filterMatchedSitesButton.style.display = 'none';
+        
+            // Show scene-related elements
+            siteCollectionContainer.classList.add('d-none');
+            sceneCollectionContainer.classList.remove('d-none');
+        
+            fetchScenesForSite(item.site.uuid).then(scenes => {
+                showScenesForSite(scenes);
+            }).catch(error => {
+                console.error('Error fetching scenes for site:', error);
+                showScenesForSite([]);
             });
-    
+        });
+        
             siteCollectionContainer.appendChild(siteCard);
         });
-    
+
         document.querySelectorAll('.remove-site-button').forEach(button => {
             button.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -783,9 +917,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 await removeSiteFromCollection(siteUuid);
             });
         });
-    
+
         updatePaginationButtons();
-        updateSitePageInfo();  // Update the page info display
+        updateSitePageInfo();
     }
     
     async function fetchScenesForSite(siteUuid) {
@@ -834,11 +968,18 @@ document.addEventListener('DOMContentLoaded', function() {
         updateScenePaginationButtons();
     }
 
+
     function displayScenes() {
         const scenesToDisplay = filteredScenes.length > 0 ? filteredScenes : currentScenes;
         sceneTableBody.innerHTML = '';
+    
         const filteredScenesToShow = showOnlyMatches ? scenesToDisplay.filter(scene => scene.status === 'Found') : scenesToDisplay;
         const sortedScenes = sortScenes(filteredScenesToShow);
+    
+        // Calculate total pages and update the scene page info
+        totalScenePages = Math.ceil(sortedScenes.length / scenesPerPage);
+        updateScenePageInfo();
+    
         const scenesToShow = sortedScenes.slice((currentPage - 1) * scenesPerPage, currentPage * scenesPerPage);
     
         scenesToShow.forEach(scene => {
@@ -865,6 +1006,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     `}
                 </td>
             `;
+    
             row.querySelector('.match-button').addEventListener('click', () => handleMatchButtonClick(scene));
     
             const findUrlButton = row.querySelector('.find-url-button');
@@ -874,8 +1016,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
             sceneTableBody.appendChild(row);
         });
+    
         updateScenePaginationButtons();
     }
+    
+    function updateScenePageInfo() {
+        const scenesToDisplay = filteredScenes.length > 0 ? filteredScenes : currentScenes;
+        totalScenePages = Math.ceil(scenesToDisplay.length / scenesPerPage);
+        document.getElementById('scene-page-info').textContent = `Page ${currentPage} of ${totalScenePages}`;
+    }
+
 
 
 function formatDuration(seconds) {
@@ -1180,106 +1330,6 @@ function formatDuration(seconds) {
         }
     }
 
-    let stopGetAllUrls = false;
-
-    getAllUrlsButton.addEventListener('click', async function() {
-        const currentState = getAllUrlsButton.getAttribute('data-state');
-        if (currentState === 'start') {
-            stopGetAllUrls = false;
-            getAllUrlsButton.setAttribute('data-state', 'stop');
-            getAllUrlsButton.innerHTML = '<i class="fa fa-stop"></i> Stop';
-            getAllUrlsButton.classList.remove('btn-primary');
-            getAllUrlsButton.classList.add('btn-danger');
-            await getAllUrls();
-        } else {
-            stopGetAllUrls = true;
-            await stopGetAllUrlsProcess();
-            getAllUrlsButton.setAttribute('data-state', 'start');
-            getAllUrlsButton.innerHTML = '<i class="fa fa-play"></i> Get All Scene URLs';
-            getAllUrlsButton.classList.remove('btn-danger');
-            getAllUrlsButton.classList.add('btn-primary');
-        }
-    });
-
-    async function getAllUrls() {
-        let urlsAdded = 0;
-
-        try {
-            for (const scene of currentScenes) {
-                if (stopGetAllUrls) {
-                    console.log('Stopping process as requested');
-                    break;
-                }
-                if (!scene.url) {
-                    console.log('Finding URL for scene:', scene.foreign_guid);
-                    const urlFound = await findSceneUrl(scene.foreign_guid);
-                    if (urlFound) {
-                        urlsAdded++;
-                    }
-                }
-            }
-
-            Toastify({
-                text: `URLs added for ${urlsAdded} scenes!`,
-                duration: 3000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
-            }).showToast();
-        } catch (error) {
-            console.error('Error finding URLs for all scenes:', error);
-            Toastify({
-                text: 'Error finding URLs for all scenes: ' + error.message,
-                duration: 3000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
-            }).showToast();
-        } finally {
-            // Reset button state when the process is complete or stopped
-            getAllUrlsButton.setAttribute('data-state', 'start');
-            getAllUrlsButton.innerHTML = '<i class="fa fa-play"></i> Get All Scene URLs';
-            getAllUrlsButton.classList.remove('btn-danger');
-            getAllUrlsButton.classList.add('btn-primary');
-        }
-    }
-
-    async function stopGetAllUrlsProcess() {
-        try {
-            const response = await fetch('/stop_get_all_urls', { method: 'POST' });
-            if (!response.ok) {
-                throw new Error(`Error stopping the process: ${response.statusText}`);
-            }
-            const result = await response.json();
-            Toastify({
-                text: result.message,
-                duration: 3000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
-            }).showToast();
-        } catch (error) {
-            console.error('Error stopping the process:', error);
-            Toastify({
-                text: 'Error stopping the process: ' + error.message,
-                duration: 3000,
-                close: true,
-                gravity: "top",
-                position: "right",
-                backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)"
-            }).showToast();
-        } finally {
-            // Ensure the button is reset to play state even if there's an error
-            getAllUrlsButton.setAttribute('data-state', 'start');
-            getAllUrlsButton.innerHTML = '<i class="fa fa-play"></i> Get All Scene URLs';
-            getAllUrlsButton.classList.remove('btn-danger');
-            getAllUrlsButton.classList.add('btn-primary');
-        }
-    }
-
     // Event listener to copy URL to clipboard
     document.addEventListener('click', function(e) {
         if (e.target && e.target.classList.contains('jdownloader-icon')) {
@@ -1310,36 +1360,6 @@ function formatDuration(seconds) {
     fetchCollection();
     });
 
-</script>
-<script>
-    function startSSE() {
-        const eventSource = new EventSource('/log_stream');
-        
-        eventSource.addEventListener('message', function(event) {
-            const newMessage = document.createElement('div');
-            newMessage.textContent = event.data;
-            const statusDiv = document.getElementById("status");
-            statusDiv.insertBefore(newMessage, statusDiv.firstChild);
-            if (statusDiv.children.length > 3) {
-                statusDiv.removeChild(statusDiv.lastChild);
-            }
-        });
-
-        eventSource.addEventListener('error', function(event) {
-            const newMessage = document.createElement('div');
-            newMessage.textContent = `Error: ${event.data}`;
-            const statusDiv = document.getElementById("status");
-            statusDiv.insertBefore(newMessage, statusDiv.firstChild);
-            if (statusDiv.children.length > 3) {
-                statusDiv.removeChild(statusDiv.lastChild);
-            }
-            eventSource.close();
-        });
-    }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        startSSE();
-    });
 </script>
 </body>
 </html>
