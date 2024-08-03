@@ -19,8 +19,7 @@ import ffmpeg
 import pystray
 import requests
 from PIL import Image
-from flask import Flask, request, jsonify, stream_with_context, render_template, Response, render_template_string, \
-    send_from_directory
+from flask import Flask, request, jsonify, stream_with_context, render_template, Response, render_template_string, send_from_directory
 from flask_cors import CORS
 from fuzzywuzzy import fuzz
 from mutagen.mp4 import MP4
@@ -707,8 +706,7 @@ def get_potential_matches(scenes, filenames, tolerance=95):
                 if scene.performers:
                     clean_scene_performers = clean_string(scene.performers)
                     if fuzz.partial_ratio(clean_filename, clean_scene_performers) >= tolerance:
-                        match_data['suggested_file_performers'] = Path(
-                            filename).stem  # Use Path.stem to get filename without extension
+                        match_data['suggested_file_performers'] = Path(filename).stem  # Use Path.stem to get filename without extension
                         match_data['performers_score'] = fuzz.partial_ratio(clean_filename, clean_scene_performers)
                 potential_matches.append(match_data)
     return potential_matches
@@ -754,8 +752,7 @@ def suggest_matches():
 
         # If no matches found via UUID, proceed with other matching methods
         if not tagged_matches:
-            filenames = [f for f in home_directory.glob('**/*') if
-                         f.is_file() and mimetypes.guess_type(f)[0] and mimetypes.guess_type(f)[0].startswith('video/')]
+            filenames = [f for f in home_directory.glob('**/*') if f.is_file() and mimetypes.guess_type(f)[0] and mimetypes.guess_type(f)[0].startswith('video/')]
             potential_matches = get_potential_matches(scenes, filenames, tolerance)
         else:
             potential_matches = tagged_matches
@@ -792,8 +789,7 @@ def match_by_uuid():
             log_entry('DEBUG', f'Checking file: {file_path} with UUID: {uuid}')
             matching_scene = next((scene for scene in scenes if scene.foreign_guid == uuid.decode('utf-8')), None)
             if matching_scene:
-                log_entry('INFO',
-                          f'Match found: File {file_path} matches scene ID {matching_scene.id} with UUID {uuid}')
+                log_entry('INFO', f'Match found: File {file_path} matches scene ID {matching_scene.id} with UUID {uuid}')
                 tagged_matches.append({
                     'scene_id': matching_scene.id,
                     'suggested_file': str(file_path),
@@ -990,8 +986,7 @@ def find_scene_url():
                 return jsonify({"error": "URL not found in the response"}), 404
         else:
             logger.error(f'Failed to fetch data. HTTP Status code: {response.status_code}')
-            return jsonify(
-                {"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
+            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
 
     except Exception as e:
         logger.exception(f'Error finding scene URL: {e}')
@@ -1221,7 +1216,7 @@ def process_studio(studio_name, headers, app):
             return
 
         if search_response.status_code != 200:
-            log_entry('WARNING',f'Failed to fetch data for studio: {studio_name} - {search_response.status_code} - {search_response.text}')
+            log_entry('WARNING', f'Failed to fetch data for studio: {studio_name} - {search_response.status_code} - {search_response.text}')
             return
 
         search_results = search_response.json()
@@ -1260,7 +1255,7 @@ def process_studio(studio_name, headers, app):
                     with db.session.no_autoflush:
                         existing_scene = Scene.query.filter_by(foreign_guid=scene_data['ForeignGuid']).first()
                         if existing_scene:
-                            log_entry('INFO',f'Scene with ForeignGuid {scene_data["ForeignGuid"]} already exists. Skipping.')
+                            log_entry('INFO', f'Scene with ForeignGuid {scene_data["ForeignGuid"]} already exists. Skipping.')
                             continue
 
                         performers = ', '.join([performer['Name'] for performer in scene_data['Credits']])
@@ -1320,8 +1315,7 @@ def fetch_scenes_data(foreign_id, headers):
 
 
 def delete_duplicate_scenes():
-    subquery = db.session.query(Scene.foreign_guid, func.count(Scene.id).label('count')
-    ).group_by(Scene.foreign_guid).having(func.count(Scene.id) > 1).subquery()
+    subquery = db.session.query(Scene.foreign_guid, func.count(Scene.id).label('count')).group_by(Scene.foreign_guid).having(func.count(Scene.id) > 1).subquery()
 
     duplicates = db.session.query(Scene).join(subquery, Scene.foreign_guid == subquery.c.foreign_guid).all()
 
