@@ -7,6 +7,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -246,9 +247,9 @@ def collection_data():
         return jsonify({"error": str(e)}), 500
 
 
-
 def paginate_query(query, page, per_page):
     return query.limit(per_page).offset((page - 1) * per_page)
+
 
 @app.route('/site_scenes/<site_uuid>', methods=['GET'])
 def site_scenes(site_uuid):
@@ -317,7 +318,7 @@ def site_scenes(site_uuid):
     except Exception as e:
         logger.error(f"Error retrieving site scenes: {e}")
         return jsonify({"error": str(e)}), 500
-        
+
 
 @app.route('/scenes_for_site/<site_uuid>', methods=['GET'])
 def scenes_for_site(site_uuid):
@@ -942,7 +943,6 @@ def search_stash_for_matches():
         return jsonify({"error": str(e)}), 500
 
 
-
 @app.route('/get_site_uuid', methods=['POST'])
 def get_site_uuid():
     data = request.json
@@ -1381,13 +1381,13 @@ def fetch_metadata_from_file(file_path):
 
 
 # Global variable to keep track of the process state
-stop_populate_sites = False
+__stop_populate_sites = False
 
 
 @app.route('/stop_populate_sites', methods=['POST'])
 def stop_populate_sites():
-    global stop_populate_sites
-    stop_populate_sites = True
+    global __stop_populate_sites
+    __stop_populate_sites = True
     return jsonify({'message': 'Populate Sites process stopped'}), 200
 
 
@@ -1694,7 +1694,7 @@ def main():
             webbrowser.open("http://127.0.0.1:6900")
         elif item.text == "Quit":
             icon.stop()
-            os._exit(0)
+            sys.exit(0)
 
     def run_tray_icon():
         icon_path = os.path.join(app.root_path, 'static', 'favicon.ico')
