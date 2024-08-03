@@ -322,9 +322,7 @@ def site_scenes(site_uuid):
     except Exception as e:
         logger.error(f"Error retrieving site scenes: {e}")
         return jsonify({"error": str(e)}), 500
-
-def paginate_query(query, page, per_page):
-    return query.limit(per_page).offset((page - 1) * per_page)
+        
 
 @app.route('/scenes_for_site/<site_uuid>', methods=['GET'])
 def scenes_for_site(site_uuid):
