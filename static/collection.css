@@ -93,7 +93,7 @@
             justify-content: center;
             gap: 5px;
             margin-top: 10px;
-            
+
         }
         .scene-count {
             text-align: center;
@@ -139,10 +139,10 @@
             color: white;
         }
         .favicon {
-            width: 25px;  
-            height: 25px;  
-            margin-right: 8px;  
-            vertical-align: middle; 
+            width: 25px;
+            height: 25px;
+            margin-right: 8px;
+            vertical-align: middle;
         }
         .custom-navbar {
             width: 100%;
@@ -174,19 +174,19 @@
             bottom: 10px;
             left: 50%;
             transform: translateX(-40%);
-            width: 75%; 
+            width: 75%;
             background-color: rgba(0, 0, 0, 0.5);
             border-radius: 5px;
             height: 20px;
         }
-        
+
         .progress-bar-inner {
             height: 100%;
             background-color: #007bff;
             border-radius: 5px;
             transition: width 0.3s;
         }
-        
+
         .progress-bar-text {
             position: absolute;
             top: 50%;
@@ -204,7 +204,7 @@
         }
         .jdownloader-icon {
         width: 24px;
-        height: 24px; 
+        height: 24px;
         margin-left: 30px;
         cursor: pointer;
         vertical-align: middle;
@@ -224,7 +224,7 @@
             border: 1px solid #ccc;
             padding: 10px;
             background-color: black;
-            text-color: white;
+            color: white;
             margin: 20px 0;
         }
         #status div {
@@ -234,9 +234,9 @@
         #status div:last-child {
             border-bottom: none;
         }
-        
+
         /* Fix the button size */
-        # get-all-urls-button {
+        #get-all-urls-button {
             width: 200px; /* Adjust the width as needed */
             height: 40px; /* Set a fixed height */
             white-space: nowrap;
@@ -246,20 +246,20 @@
             padding: 0 10px; /* Add some padding for better appearance */
             box-sizing: border-box; /* Ensure padding and border are included in the element's total width and height */
         }
-        
+
         /* Ensure the icon does not resize */
-        # get-all-urls-button .fa {
+        #get-all-urls-button .fa {
             display: inline-block;
             vertical-align: middle;
         }
-        
+
         /* Ensure the SVG icon maintains its size */
         .svg-inline--fa {
             width: 16px; /* Set a fixed width for the icon */
             height: 16px; /* Set a fixed height for the icon */
             vertical-align: middle; /* Align with text */
         }
-        
+
         /* Ensure g.missing does not resize */
         g.missing {
             width: 16px; /* Set a fixed width if needed */
@@ -267,9 +267,9 @@
             display: inline-block;
             vertical-align: middle;
         }
-        
+
         /* Prevent the button from resizing its height */
-        # get-all-urls-button {
+        #get-all-urls-button {
             height: 40px; /* Set a fixed height */
             line-height: 40px; /* Align text vertically */
             overflow: hidden; /* Hide any overflow content */

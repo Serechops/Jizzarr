@@ -6,10 +6,10 @@ body {
             padding: 0;
         }
         .favicon {
-            width: 25px;  
-            height: 25px;  
-            margin-right: 8px;  
-            vertical-align: middle; 
+            width: 25px;
+            height: 25px;
+            margin-right: 8px;
+            vertical-align: middle;
         }
         .custom-navbar {
             width: 100%;
@@ -34,7 +34,6 @@ body {
             border-radius: 4px;
         }
         .container {
-            margin-top: 120px;
             max-width: 100%; /* Full width */
             padding: 20px;
             margin: 0 auto;
@@ -111,7 +110,7 @@ body {
         .scrollable-container {
             max-height: 400px;
             overflow-y: auto;
-            border: 1px solid #ccc; 
+            border: 1px solid #ccc;
             padding: 10px;
         }
 

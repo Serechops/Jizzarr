@@ -1,6 +1,10 @@
+import sys
+
 import requests
 from flask import Flask
+
 from models import db, Site, Scene
+
 
 def create_app():
     app = Flask(__name__)
@@ -8,6 +12,7 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
     return app
+
 
 def get_scenes_for_site(site_uuid):
     app = create_app()
@@ -45,6 +50,7 @@ def get_scenes_for_site(site_uuid):
             })
 
         return scene_list
+
 
 def search_stash_for_matches(scenes):
     stash_endpoint = "http://192.168.1.54:9999/graphql"
@@ -101,8 +107,8 @@ def search_stash_for_matches(scenes):
         except requests.exceptions.RequestException as e:
             print(f'Request failed: {e}')
 
-if __name__ == "__main__":
-    import sys
+
+def main():
     if len(sys.argv) != 2:
         print("Usage: python get_scenes.py <site_uuid>")
         sys.exit(1)
@@ -113,3 +119,7 @@ if __name__ == "__main__":
         print(scenes['error'])
     else:
         search_stash_for_matches(scenes)
+
+
+if __name__ == "__main__":
+    main()
