@@ -35,8 +35,8 @@ A system tray icon provides easy access to open the application in a browser and
 ## Getting Started
 
 ### Prerequisites
-- Python 3.8 or later
-- pip (Python package installer)
+- Python 3.9 or later
+- Poetry
 
 ### Installation
 
@@ -46,22 +46,16 @@ A system tray icon provides easy access to open the application in a browser and
     cd jizzarr
     ```
 
-2. Create a virtual environment and activate it:
+2. Install the required packages:
     ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
-
-3. Install the required packages:
-    ```sh
-    pip install -r requirements.txt
+    poetry install
     ```
 
 ### Running the Application
 
 1. Start the application:
     ```sh
-    python app.py
+    poetry run python app.py
     ```
 
 2. Open your browser and navigate to `http://127.0.0.1:6900`.
