@@ -251,10 +251,6 @@ body {
         width: 80%;
     }
 
-    .infographic {
-        display: none;
-    }
-
     #progress-bar-container {
         transform: translateY(120%);
         max-height: 30px;
@@ -264,20 +260,17 @@ body {
 
 @media (max-width: 576px) {
     .container {
-        margin-top: 75px;
+        margin-top: 120px;
     }
 
     .search-container {
         width: 90%;
     }
 
-    .infographic {
-        display: none;
-    }
 
     #progress-bar-container {
-        transform: translateY(120%);
+        transform: translateY(210%);
         max-height: 30px;
-        max-width: 75px;
+        max-width: 235px;
     }
 }

@@ -347,9 +347,19 @@ g.missing {
         flex-direction: column;
         gap: 5px;
     }
+    
+    .progress-bar {
+        transform: translateY(-50px);
+        left: 50px;
+    }
+    
+    .btn {
+        width: 100%;
+        margin-bottom: 5px;
+    }
 }
 
-@media (max-width: 576px) {
+@media (max-width: 611px) {
     .site-card {
         padding: 10px 5px;
     }
@@ -361,5 +371,33 @@ g.missing {
     .btn {
         width: 100%;
         margin-bottom: 5px;
+    }
+    
+    #search-input {
+        margin-top: 50px;
+    }
+    
+    .progress-bar {
+        transform: translateY(-50px);
+        left: 50px;
+    }
+}
+
+@media (max-width: 530px) {
+    .site-card {
+        padding: 10px 5px;
+    }
+
+    .match-controls {
+        gap: 5px;
+    }
+
+    .btn {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    #search-input {
+        margin-top: 75px;
     }
 }
