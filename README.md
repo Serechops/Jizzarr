@@ -1,4 +1,4 @@
-# Jizzarr <img src=".github/images/jizzarr.png" alt="Jizzarr" width="60"/>
+# <img src=".github/images/jizzarr.png" alt="Jizzarr" width="36" align="left" /> Jizzarr
 
 ## Introduction
 Jizzarr is a web application designed to manage and organize adult content metadata. It has the ability to integrate with both TPDB and Stash.
