@@ -744,8 +744,8 @@ def suggest_matches():
             if matching_scene:
                 tagged_matches.append({
                     'scene_id': matching_scene.id,
-                    'suggested_file': file_path,
-                    'suggested_file_title': Path(file_path).stem,
+                    'suggested_file': str(file_path),
+                    'suggested_file_title': Path(str(file_path)).stem,
                     'uuid': uuid,
                     'match_type': 'UUID'
                 })
@@ -793,7 +793,7 @@ def match_by_uuid():
                 tagged_matches.append({
                     'scene_id': matching_scene.id,
                     'suggested_file': str(file_path),
-                    'suggested_file_title': Path(file_path).stem,
+                    'suggested_file_title': Path(str(file_path)).stem,
                     'uuid': uuid.decode('utf-8'),
                     'match_type': 'UUID'
                 })
