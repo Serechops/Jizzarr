@@ -197,11 +197,6 @@ def collection():
     return render_template('collection.html')
 
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-
 @app.route('/collection_data', methods=['GET'])
 def collection_data():
     try:
@@ -1394,11 +1389,6 @@ def stop_populate_sites():
     global stop_populate_sites
     stop_populate_sites = True
     return jsonify({'message': 'Populate Sites process stopped'}), 200
-
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 @app.route('/set_library_directory', methods=['POST'])
