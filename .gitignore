@@ -1,0 +1,16 @@
+**/.DS_Store
+.vscode
+.idea
+__pycache__/
+.coverage
+/htmlcov/
+cov.xml
+coverage.xml
+UNKNOWN.egg-info/
+dist/
+node_modules
+.env
+.flakeheaven_cache
+.ruff_cache
+Thumbs.db
+instance

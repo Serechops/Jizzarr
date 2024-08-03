@@ -1,5 +1,3 @@
-import os
-import json
 import requests
 from flask import Flask
 from models import db, Site, Scene
