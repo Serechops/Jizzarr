@@ -6,6 +6,7 @@ import mimetypes
 import os
 import queue
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -29,7 +30,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from config import Config as AppConfig
 from models import db, Config, Site, Scene, Log, LibraryDirectory
-from watcher import main as watcher_main
 
 # Initialize the Flask application
 app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
@@ -1711,7 +1711,7 @@ def main():
         with app.app_context():
             db.create_all()
             delete_duplicate_scenes()
-            watcher_main()
+            subprocess.Popen(['python', 'watcher.py'])
         app.run(debug=False, host='0.0.0.0', port=6900)
 
     # Start the Flask app in a separate thread
