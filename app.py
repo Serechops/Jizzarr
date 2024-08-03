@@ -744,7 +744,7 @@ def suggest_matches():
             if matching_scene:
                 tagged_matches.append({
                     'scene_id': matching_scene.id,
-                    'suggested_file': file_path,
+                    'suggested_file': str(file_path),
                     'suggested_file_title': Path(str(file_path)).stem,
                     'uuid': uuid,
                     'match_type': 'UUID'
