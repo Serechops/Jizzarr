@@ -185,8 +185,7 @@ def process_json_file(json_file_path, download_dir):
                             os.rename(json_file_path, new_json_filepath)
                             with open(new_json_filepath, 'w') as f:
                                 json.dump(data, f, indent=4)
-                            logger.info(
-                                f"Updated and renamed JSON file {json_file_path} to {new_json_filepath} with new filename {new_filename}")
+                            logger.info(f"Updated and renamed JSON file {json_file_path} to {new_json_filepath} with new filename {new_filename}")
 
                             # Move the files and update paths
                             new_file_path, new_json_file_path = move_files_to_site_directory(new_filepath, new_json_filepath, metadata['site']['name'], session)
