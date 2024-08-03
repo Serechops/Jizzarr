@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const searchButton = document.getElementById('search-button');
     const searchInput = document.getElementById('search-input');
     const siteDetails = document.getElementById('site-details');
@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let progressInterval;
 
-    searchStashButton.addEventListener('click', async function() {
+    searchStashButton.addEventListener('click', async function () {
         // Show loading indicator when search-stash button is pressed
         loadingIndicator.classList.remove('hidden');
         progressBarContainer.style.display = 'block';
@@ -107,14 +107,14 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('API key is missing');
             return null;
         }
-    
+
         const url = `https://api.theporndb.net/jizzarr/${endpoint}`;
         const headers = {
             'Authorization': `Bearer ${apiKey}`
         };
-    
+
         try {
-            const response = await fetch(url, { headers });
+            const response = await fetch(url, {headers});
             if (response.ok) {
                 const data = await response.json();
                 console.log(`Data from ${endpoint}:`, data); // Print the API response for debugging
@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 foreign_id: scene.ForeignId
             }))
         };
-    
+
         // Save to server-side database
         fetch('/add_site', {
             method: 'POST',
@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Event listener for search button
     if (searchButton) {
-        searchButton.addEventListener('click', async function() {
+        searchButton.addEventListener('click', async function () {
             const siteName = searchInput.value.trim();
             if (siteName) {
                 // Show loading indicator when search button is pressed
@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Remove site from collection
     function removeSiteFromCollection(siteUuid) {
-        fetch(`/remove_site/${siteUuid}`, { method: 'DELETE' })
+        fetch(`/remove_site/${siteUuid}`, {method: 'DELETE'})
             .then(response => response.json())
             .then(data => {
                 console.log('Site removed:', data);
@@ -501,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ scene_id: sceneId, file_path: file.path })
+                        body: JSON.stringify({scene_id: sceneId, file_path: file.path})
                     });
 
                     const result = await response.json();
@@ -541,12 +541,12 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ siteUuid, localDirectory })
+            body: JSON.stringify({siteUuid, localDirectory})
         }).then(response => response.json())
-        .then(data => {
-            console.log('Comparison results:', data);
-            updateTableWithComparison(data.missing_files, data.matched_files);
-        }).catch(error => {
+            .then(data => {
+                console.log('Comparison results:', data);
+                updateTableWithComparison(data.missing_files, data.matched_files);
+            }).catch(error => {
             console.error('Error comparing collection:', error);
         });
     }

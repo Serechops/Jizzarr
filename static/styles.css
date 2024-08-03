@@ -12,10 +12,10 @@ body {
 }
 
 .favicon {
-    width: 25px;  
-    height: 25px;  
-    margin-right: 8px;  
-    vertical-align: middle; 
+    width: 25px;
+    height: 25px;
+    margin-right: 8px;
+    vertical-align: middle;
 }
 
 .container {
@@ -76,7 +76,7 @@ button:hover {
 }
 
 #site-collection .site-card img {
-        display: none;
+    display: none;
 }
 
 #search-results {
@@ -233,8 +233,12 @@ button:hover {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Tabulator dark mode styles */
