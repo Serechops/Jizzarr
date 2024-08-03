@@ -20,7 +20,7 @@ watchdog = "^2.1.6"
 fuzzywuzzy = {extras = ["speedup"], version = "^0.18.0"}
 aiohttp = {version = "^3.10"}
 asyncio = {version = "^3.4.3"}
-ffmpeg = {version = "^1.4"}
+ffmpeg-python = {version = "^0.2"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5"
