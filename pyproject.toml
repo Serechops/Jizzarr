@@ -44,7 +44,7 @@ ignore = ["E501", "E722"]
 generate-setup-file = true
 
 [tool.poetry.scripts]
-jizzarr = "app"
+jizzarr = "app.main"
 
 [build-system]
 requires = ["poetry-core"]

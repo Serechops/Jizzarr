@@ -1,32 +1,35 @@
-import os
-import re
-import json
-import mimetypes
-from fuzzywuzzy import fuzz
-from mutagen.mp4 import MP4
-from pathlib import Path
-from flask import Flask, request, jsonify, stream_with_context, render_template, send_file, Response
-from flask_cors import CORS
-from models import db, Config, Site, Scene, Log, LibraryDirectory
-import requests
-import uuid
-from sqlalchemy import func, text, event, case
+import asyncio
 import datetime
+import json
 import logging
-from contextlib import contextmanager
-from sqlalchemy.exc import SQLAlchemyError
+import mimetypes
+import os
 import queue
+import re
+import subprocess
 import threading
 import time
-from watcher import Watcher
-import subprocess
 import webbrowser
-from flask_sqlalchemy import SQLAlchemy
-from config import Config as AppConfig
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from pathlib import Path
+
+import aiohttp
+import ffmpeg
 import pystray
-from PIL import Image, ImageDraw 
+import requests
+from PIL import Image
+from flask import Flask, request, jsonify, stream_with_context, render_template, Response, render_template_string, \
+    send_from_directory
+from flask_cors import CORS
+from fuzzywuzzy import fuzz
+from mutagen.mp4 import MP4
+from sqlalchemy import text, event, case, func
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import subqueryload
+from sqlalchemy.exc import SQLAlchemyError
+
+from config import Config as AppConfig
+from models import db, Config, Site, Scene, Log, LibraryDirectory
 
 # Initialize the Flask application
 app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
@@ -45,6 +48,7 @@ app.config.from_object(AppConfig)
 with app.app_context():
     db.create_all()
 
+
 class SSEHandler(logging.Handler):
     def __init__(self):
         super().__init__()
@@ -61,17 +65,21 @@ class SSEHandler(logging.Handler):
     def add_listener(self, listener):
         self.listeners.append(listener)
 
+
 sse_handler = SSEHandler()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 logger.addHandler(sse_handler)
 
+
 def push_event(event):
     event_queue.put(event)
+
 
 def sse_log_stream():
     def stream():
         messages = []
+
         def new_message(msg):
             messages.append(msg)
 
@@ -82,8 +90,9 @@ def sse_log_stream():
                 msg = messages.pop(0)
                 yield f'data: {msg}\n\n'
             time.sleep(0.1)
-    
+
     return Response(stream_with_context(stream()), content_type='text/event-stream')
+
 
 @contextmanager
 def session_scope():
@@ -99,31 +108,38 @@ def session_scope():
     finally:
         session.close()
 
+
 @app.route('/log_stream')
 def log_stream_route():
     return sse_log_stream()
+
 
 def start_sse_thread():
     thread = threading.Thread(target=sse_log_stream)
     thread.daemon = True
     thread.start()
 
+
 # Enable CORS for the app
 CORS(app)
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
 @app.route('/statistics')
 def stats_page():
     return render_template('stats.html')
+
 
 def get_config_value(key):
     config = Config.query.filter_by(key=key).first()
     value = config.value if config else ''
     app.logger.debug(f"Config value for {key}: {value}")
     return value
+
 
 @app.route('/config_page', methods=['GET'])
 def config_page():
@@ -136,13 +152,13 @@ def config_page():
 
     library_directories = LibraryDirectory.query.all()
     sites = Site.query.all()
-    
+
     libraries_with_sites = {}
     for library in library_directories:
         libraries_with_sites[library] = [site for site in sites if site.home_directory and site.home_directory.startswith(library.path)]
 
-    return render_template('config.html', stash_endpoint=stash_endpoint, stash_api_key=stash_api_key, tpdb_api_key=tpdb_api_key, 
-                           download_folder=download_folder, libraries_with_sites=libraries_with_sites)
+    return render_template('config.html', stash_endpoint=stash_endpoint, stash_api_key=stash_api_key, tpdb_api_key=tpdb_api_key, download_folder=download_folder, libraries_with_sites=libraries_with_sites)
+
 
 @app.route('/save_config', methods=['POST'])
 def save_config():
@@ -176,9 +192,11 @@ def get_tpdb_api_key():
         log_entry('ERROR', f"Error retrieving TPDB API Key: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/collection')
 def collection():
     return render_template('collection.html')
+
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -188,7 +206,6 @@ logger = logging.getLogger(__name__)
 @app.route('/collection_data', methods=['GET'])
 def collection_data():
     try:
-
         # Fetch all sites from the database
         all_sites = Site.query.order_by(Site.id).all()
         site_ids = [site.id for site in all_sites]
@@ -228,14 +245,11 @@ def collection_data():
             'total_sites': len(all_sites)
         }
 
-        
-
         logger.info('Collection data retrieved successfully')
         return jsonify(response)
     except Exception as e:
         logger.error(f"Error retrieving collection data: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 
 @app.route('/site_scenes/<site_uuid>', methods=['GET'])
@@ -307,7 +321,6 @@ def site_scenes(site_uuid):
         return jsonify({"error": str(e)}), 500
 
 
-
 @app.route('/scenes_for_site/<site_uuid>', methods=['GET'])
 def scenes_for_site(site_uuid):
     try:
@@ -357,8 +370,6 @@ def scenes_for_site(site_uuid):
         logger.error(f"Error retrieving scenes for site {site_uuid}: {e}")
         return jsonify({"error": str(e)}), 500
 
-import asyncio
-import aiohttp
 
 async def fetch_scenes(session, url, headers, site_uuid, page_scene, per_page_scene):
     try:
@@ -374,6 +385,7 @@ async def fetch_scenes(session, url, headers, site_uuid, page_scene, per_page_sc
         app.logger.error(f'Error fetching scenes for site UUID: {site_uuid} on page {page_scene}: {e}')
         return []
 
+
 async def fetch_all_scenes(headers, site_uuid, per_page_scene):
     scenes = []
     page_scene = 1
@@ -387,10 +399,12 @@ async def fetch_all_scenes(headers, site_uuid, per_page_scene):
             page_scene += 1
     return scenes
 
+
 def sync_fetch_all_scenes(headers, site_uuid, per_page_scene):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     return loop.run_until_complete(fetch_all_scenes(headers, site_uuid, per_page_scene))
+
 
 @app.route('/add_site', methods=['POST'])
 def add_site():
@@ -550,7 +564,7 @@ def remove_site(site_uuid):
         for scene in scenes:
             db.session.delete(scene)
         db.session.commit()
-        
+
         db.session.delete(site)
         db.session.commit()
 
@@ -583,6 +597,7 @@ def remove_scene(scene_id):
     except Exception as e:
         log_entry('ERROR', f"Error removing scene: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/match_scene', methods=['POST'])
 def match_scene():
@@ -629,7 +644,6 @@ def set_home_directory():
     log_entry('INFO', f'Home directory set successfully for site UUID: {site_uuid}')
     return jsonify({'message': 'Home directory set successfully!'})
 
-import ffmpeg
 
 def get_file_duration(file_path):
     try:
@@ -644,10 +658,12 @@ def get_file_duration(file_path):
         print(f"Error getting duration for file {file_path}: {e}")
     return None
 
+
 def clean_string(input_string):
     if isinstance(input_string, list):
         return ' '.join([re.sub(r'[^\w\s]', '', performer).lower() for performer in input_string])
     return re.sub(r'[^\w\s]', '', input_string).lower()
+
 
 def extract_date_from_filename(filename):
     date_patterns = [
@@ -660,6 +676,7 @@ def extract_date_from_filename(filename):
         if match:
             return match.group(1)
     return None
+
 
 def get_potential_matches(scenes, filenames, tolerance=95):
     potential_matches = []
@@ -690,10 +707,12 @@ def get_potential_matches(scenes, filenames, tolerance=95):
                 if scene.performers:
                     clean_scene_performers = clean_string(scene.performers)
                     if fuzz.partial_ratio(clean_filename, clean_scene_performers) >= tolerance:
-                        match_data['suggested_file_performers'] = Path(filename).stem  # Use Path.stem to get filename without extension
+                        match_data['suggested_file_performers'] = Path(
+                            filename).stem  # Use Path.stem to get filename without extension
                         match_data['performers_score'] = fuzz.partial_ratio(clean_filename, clean_scene_performers)
                 potential_matches.append(match_data)
     return potential_matches
+
 
 @app.route('/suggest_matches', methods=['POST'])
 def suggest_matches():
@@ -735,7 +754,8 @@ def suggest_matches():
 
         # If no matches found via UUID, proceed with other matching methods
         if not tagged_matches:
-            filenames = [f for f in home_directory.glob('**/*') if f.is_file() and mimetypes.guess_type(f)[0] and mimetypes.guess_type(f)[0].startswith('video/')]
+            filenames = [f for f in home_directory.glob('**/*') if
+                         f.is_file() and mimetypes.guess_type(f)[0] and mimetypes.guess_type(f)[0].startswith('video/')]
             potential_matches = get_potential_matches(scenes, filenames, tolerance)
         else:
             potential_matches = tagged_matches
@@ -745,6 +765,7 @@ def suggest_matches():
     except Exception as e:
         log_entry('ERROR', f"Error suggesting matches: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/match_by_uuid', methods=['POST'])
 def match_by_uuid():
@@ -765,13 +786,14 @@ def match_by_uuid():
         log_entry('DEBUG', f'Start scanning directory for files with UUID tags: {home_directory}')
         files_with_tags = scan_directory_for_files(home_directory)
         log_entry('DEBUG', f'Files with UUID tags found: {files_with_tags}')
-        
+
         tagged_matches = []
         for file_path, uuid in files_with_tags:
             log_entry('DEBUG', f'Checking file: {file_path} with UUID: {uuid}')
             matching_scene = next((scene for scene in scenes if scene.foreign_guid == uuid.decode('utf-8')), None)
             if matching_scene:
-                log_entry('INFO', f'Match found: File {file_path} matches scene ID {matching_scene.id} with UUID {uuid}')
+                log_entry('INFO',
+                          f'Match found: File {file_path} matches scene ID {matching_scene.id} with UUID {uuid}')
                 tagged_matches.append({
                     'scene_id': matching_scene.id,
                     'suggested_file': str(file_path),
@@ -788,6 +810,7 @@ def match_by_uuid():
         log_entry('ERROR', f"Error suggesting matches by UUID: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 def fetch_custom_tag(file_path):
     try:
         video = MP4(file_path)
@@ -799,13 +822,6 @@ def fetch_custom_tag(file_path):
         print(f"Failed to read metadata from {file_path}: {e}")
         return None
 
-import os
-from mutagen.mp4 import MP4
-from moviepy.editor import VideoFileClip
-from pathlib import Path
-import mimetypes
-from fuzzywuzzy import fuzz
-from flask import jsonify, request
 
 def scan_directory_for_files(directory):
     supported_extensions = ['.mp4', '.m4v', '.mov']
@@ -821,6 +837,7 @@ def scan_directory_for_files(directory):
 
     return files_with_tags
 
+
 def match_scene_by_uuid(uuid, file_path):
     with app.app_context():
         matching_scene = Scene.query.filter_by(foreign_guid=uuid).first()
@@ -831,6 +848,7 @@ def match_scene_by_uuid(uuid, file_path):
             log_entry('INFO', f'Automatically matched scene ID: {matching_scene.id} with file: {file_path}')
             return True
         return False
+
 
 @app.route('/search_stash_for_matches', methods=['POST'])
 def search_stash_for_matches():
@@ -928,6 +946,7 @@ def search_stash_for_matches():
         log_entry('ERROR', f"Error searching stash for matches: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/find_scene_url', methods=['POST'])
 def find_scene_url():
     logger.info('Received request to find scene URL')
@@ -949,7 +968,7 @@ def find_scene_url():
         headers = {
             'Authorization': f'Bearer {api_key}'
         }
-        
+
         logger.debug(f'Requesting URL: {api_url} with headers: {headers}')
         response = requests.get(api_url, headers=headers)
 
@@ -958,7 +977,7 @@ def find_scene_url():
             scene_url = data.get('url')
             if scene_url:
                 logger.info(f'Scene URL found: {scene_url} for foreign GUID: {foreign_guid}')
-                
+
                 # Save the URL to the database
                 scene = Scene.query.filter_by(foreign_guid=foreign_guid).first()
                 if scene:
@@ -971,11 +990,13 @@ def find_scene_url():
                 return jsonify({"error": "URL not found in the response"}), 404
         else:
             logger.error(f'Failed to fetch data. HTTP Status code: {response.status_code}')
-            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
+            return jsonify(
+                {"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
 
     except Exception as e:
         logger.exception(f'Error finding scene URL: {e}')
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/save_scene_url', methods=['POST'])
 def save_scene_url():
@@ -994,6 +1015,7 @@ def save_scene_url():
         return jsonify({'message': 'Scene URL saved successfully!'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/get_scene_details', methods=['POST'])
 def get_scene_details():
@@ -1040,11 +1062,13 @@ def get_scene_details():
                 return jsonify({"error": "URL not found in the response"}), 404
         else:
             app.logger.error(f"Failed to fetch data from TPDB API. HTTP Status code: {response.status_code}")
-            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
+            return jsonify(
+                {"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
 
     except Exception as e:
         app.logger.error(f"Exception occurred while fetching scene details: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/get_site_uuid', methods=['POST'])
 def get_site_uuid():
@@ -1063,13 +1087,16 @@ def get_site_uuid():
     log_entry('INFO', f'Site UUID retrieved successfully for title: {site_title}')
     return jsonify({'site_uuid': site.uuid})
 
+
 @app.route('/collection_stats', methods=['GET'])
 def collection_stats():
     try:
         total_scenes = Scene.query.count()
         collected_scenes = Scene.query.filter(Scene.status == 'Found', Scene.local_path.isnot(None)).count()
-        
-        collected_duration = db.session.query(func.sum(Scene.duration)).filter(Scene.status == 'Found', Scene.local_path.isnot(None)).scalar() or 0
+
+        collected_duration = db.session.query(func.sum(Scene.duration)).filter(Scene.status == 'Found',
+                                                                               Scene.local_path.isnot(
+                                                                                   None)).scalar() or 0
         total_duration = db.session.query(func.sum(Scene.duration)).scalar() or 0
         missing_duration = total_duration - collected_duration
         avg_rating = db.session.query(func.avg(Site.rating)).scalar() or 0
@@ -1090,13 +1117,14 @@ def collection_stats():
         return jsonify({"error": str(e)}), 500
 
 
-
 @app.before_request
 def before_request():
     if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
         db.session.execute(text('PRAGMA busy_timeout = 30000'))  # 30 seconds
 
+
 progress = {"total": 0, "completed": 0}
+
 
 @app.route('/progress')
 def get_progress():
@@ -1105,17 +1133,15 @@ def get_progress():
             data = json.dumps(progress)
             yield f"data: {data}\n\n"
             time.sleep(1)
-    
+
     return Response(generate(), mimetype='text/event-stream')
 
-from concurrent.futures import ThreadPoolExecutor
-import threading
 
 def populate_from_stash_thread():
     with app.app_context():
         try:
             log_entry('INFO', 'Starting populate_from_stash_thread')
-            
+
             stash_endpoint = Config.query.filter_by(key='stashEndpoint').first()
             stash_api_key = Config.query.filter_by(key='stashApiKey').first()
             tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
@@ -1174,7 +1200,7 @@ def populate_from_stash_thread():
                 futures = [executor.submit(process_studio, studio_name, headers, app) for studio_name in studio_names]
                 for future in futures:
                     future.result()  # Wait for all futures to complete
-            
+
             delete_duplicate_scenes()
 
             log_entry('INFO', 'Sites and scenes populated from Stash')
@@ -1185,6 +1211,7 @@ def populate_from_stash_thread():
             log_entry('ERROR', f"Error populating from stash: {e}")
             progress['total'] = 0
             progress['completed'] = 0
+
 
 def process_studio(studio_name, headers, app):
     with app.app_context():
@@ -1197,7 +1224,7 @@ def process_studio(studio_name, headers, app):
             return
 
         if search_response.status_code != 200:
-            log_entry('WARNING', f'Failed to fetch data for studio: {studio_name} - {search_response.status_code} - {search_response.text}')
+            log_entry('WARNING',f'Failed to fetch data for studio: {studio_name} - {search_response.status_code} - {search_response.text}')
             return
 
         search_results = search_response.json()
@@ -1236,7 +1263,7 @@ def process_studio(studio_name, headers, app):
                     with db.session.no_autoflush:
                         existing_scene = Scene.query.filter_by(foreign_guid=scene_data['ForeignGuid']).first()
                         if existing_scene:
-                            log_entry('INFO', f'Scene with ForeignGuid {scene_data["ForeignGuid"]} already exists. Skipping.')
+                            log_entry('INFO',f'Scene with ForeignGuid {scene_data["ForeignGuid"]} already exists. Skipping.')
                             continue
 
                         performers = ', '.join([performer['Name'] for performer in scene_data['Credits']])
@@ -1245,7 +1272,8 @@ def process_studio(studio_name, headers, app):
                             title=scene_data['Title'],
                             date=scene_data['ReleaseDate'],
                             duration=scene_data['Duration'],
-                            image=next((img['Url'] for img in scene_data['Images'] if img['CoverType'] == 'Screenshot'), ''),
+                            image=next((img['Url'] for img in scene_data['Images'] if img['CoverType'] == 'Screenshot'),
+                                       ''),
                             performers=performers,
                             status=scene_data.get('Status', ''),
                             local_path=scene_data.get('LocalPath', ''),
@@ -1270,6 +1298,7 @@ def process_studio(studio_name, headers, app):
         progress['completed'] += 1
         log_entry('INFO', f'Progress: {progress["completed"]}/{progress["total"]}')
 
+
 @app.route('/populate_from_stash', methods=['POST'])
 def populate_from_stash():
     # Validate configuration before starting the thread
@@ -1284,6 +1313,7 @@ def populate_from_stash():
     thread.start()
     return jsonify({'message': 'Stash population started'}), 202
 
+
 def fetch_scenes_data(foreign_id, headers):
     url = f"https://api.theporndb.net/jizzarr/site/{foreign_id}"
     response = requests.get(url, headers=headers)
@@ -1292,12 +1322,9 @@ def fetch_scenes_data(foreign_id, headers):
         return site_data.get('Episodes', [])
     return []
 
-import logging
-from sqlalchemy.sql import func
 
 def delete_duplicate_scenes():
-    subquery = db.session.query(
-        Scene.foreign_guid, func.count(Scene.id).label('count')
+    subquery = db.session.query(Scene.foreign_guid, func.count(Scene.id).label('count')
     ).group_by(Scene.foreign_guid).having(func.count(Scene.id) > 1).subquery()
 
     duplicates = db.session.query(Scene).join(subquery, Scene.foreign_guid == subquery.c.foreign_guid).all()
@@ -1335,10 +1362,12 @@ def delete_duplicate_scenes():
     total_size_mb = total_size_saved / (1024 * 1024)
     log_entry('INFO', f"Total space saved: {total_size_mb:.2f} MB")
 
+
 def log_entry(level, message):
     log = Log(level=level, message=message)
     db.session.add(log)
     db.session.commit()
+
 
 @app.route('/logs')
 def logs():
@@ -1352,8 +1381,10 @@ def logs():
         })
     return render_template('logs.html', logs=log_entries)
 
+
 LOGS_FOLDER = os.path.join(app.static_folder, 'logs')
 os.makedirs(LOGS_FOLDER, exist_ok=True)
+
 
 @app.route('/logs_data', methods=['GET'])
 def logs_data():
@@ -1387,18 +1418,20 @@ def logs_data():
         logger.error(f"Error retrieving logs data: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/download_logs')
 def download_logs():
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     log_filename = f'logs_{timestamp}.txt'
     log_filepath = os.path.join(LOGS_FOLDER, log_filename)
-    
+
     logs = Log.query.order_by(Log.timestamp).all()
     with open(log_filepath, 'w') as f:
         for log in logs:
             f.write(f"{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')} - {log.level} - {log.message}\n")
-    
+
     return send_from_directory(LOGS_FOLDER, log_filename, as_attachment=True)
+
 
 @app.route('/clear_logs', methods=['POST'])
 def clear_logs():
@@ -1407,21 +1440,22 @@ def clear_logs():
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         log_filename = f'logs_{timestamp}.txt'
         log_filepath = os.path.join(LOGS_FOLDER, log_filename)
-        
+
         logs = Log.query.order_by(Log.timestamp).all()
         with open(log_filepath, 'w') as f:
             for log in logs:
                 f.write(f"{log.timestamp.strftime('%Y-%m-%d %H:%M:%S')} - {log.level} - {log.message}\n")
-        
+
         # Clear logs
         Log.query.delete()
         db.session.commit()
-        
+
         logger.info('Logs cleared successfully')
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Error clearing logs: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/get_metadata', methods=['POST'])
 def get_metadata():
@@ -1432,14 +1466,14 @@ def get_metadata():
         if not data or 'scene_url' not in data:
             app.logger.error("No scene_url provided in request")
             return jsonify({'error': 'scene_url not provided'}), 400
-        
+
         scene_url = data['scene_url']
         app.logger.debug(f"Looking up scene with URL: {scene_url}")
         scene = Scene.query.filter_by(url=scene_url).first()
         if not scene:
             app.logger.error(f"Scene not found for URL: {scene_url}")
             return jsonify({'error': 'Scene not found'}), 404
-        
+
         app.logger.debug(f"Scene found: {scene.title} (ID: {scene.id})")
         site = Site.query.get(scene.site_id)
         if not site:
@@ -1448,7 +1482,7 @@ def get_metadata():
 
         app.logger.debug(f"Site found: {site.name} (ID: {site.id})")
         performers = [{'name': performer.strip()} for performer in scene.performers.split(',')]
-        
+
         metadata = {
             'site': {'name': site.name},
             'title': scene.title,
@@ -1457,12 +1491,13 @@ def get_metadata():
             'foreign_guid': scene.foreign_guid,
             'extension': '.mp4'
         }
-        
+
         app.logger.debug(f"Returning metadata: {metadata}")
         return jsonify(metadata)
     except Exception as e:
         app.logger.error(f"An error occurred: {e}")
         return jsonify({'error': 'Internal Server Error'}), 500
+
 
 def fetch_metadata_from_file(file_path):
     try:
@@ -1475,14 +1510,17 @@ def fetch_metadata_from_file(file_path):
         logger.error(f"Failed to fetch metadata from {file_path}: {e}")
         return None
 
+
 # Global variable to keep track of the process state
 stop_get_all_urls = False
+
 
 @app.route('/stop_get_all_urls', methods=['POST'])
 def stop_get_all_urls():
     global stop_get_all_urls
     stop_get_all_urls = True
     return jsonify({'message': 'Get All URLs process stopped'}), 200
+
 
 @app.route('/get_all_urls', methods=['POST'])
 def get_all_urls():
@@ -1504,8 +1542,10 @@ def get_all_urls():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 # Global variable to keep track of the process state
 stop_populate_sites = False
+
 
 @app.route('/stop_populate_sites', methods=['POST'])
 def stop_populate_sites():
@@ -1513,11 +1553,11 @@ def stop_populate_sites():
     stop_populate_sites = True
     return jsonify({'message': 'Populate Sites process stopped'}), 200
 
-import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @app.route('/set_library_directory', methods=['POST'])
 def set_library_directory():
@@ -1538,6 +1578,7 @@ def set_library_directory():
     except Exception as e:
         logger.error(f"Error setting library directory: {e}")
         return jsonify({'error': 'Failed to set library directory'}), 500
+
 
 def scan_and_match_directories(base_path):
     try:
@@ -1562,6 +1603,7 @@ def scan_and_match_directories(base_path):
         logger.error(f"Error scanning and matching directories: {str(e)}")
         return str(e)
 
+
 @app.route('/remove_library/<int:library_id>', methods=['DELETE'])
 def remove_library(library_id):
     try:
@@ -1576,6 +1618,7 @@ def remove_library(library_id):
     except Exception as e:
         logger.error(f"Error removing library: {e}")
         return jsonify({'error': 'Failed to remove library'}), 500
+
 
 @app.route('/scan_libraries', methods=['POST'])
 def scan_libraries():
@@ -1599,15 +1642,19 @@ def scan_libraries():
         log_entry('ERROR', f"Error during manual scan for library changes: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 # Set up logging to capture log records in a list
 log_records = []
+
 
 class ListHandler(logging.Handler):
     def emit(self, record):
         log_records.append(self.format(record))
 
+
 list_handler = ListHandler()
 logging.getLogger().addHandler(list_handler)
+
 
 # Log all SQL statements
 @event.listens_for(Engine, "before_cursor_execute")
@@ -1615,19 +1662,23 @@ def before_cursor_execute(conn, cursor, statement, parameters, context, executem
     logger.info(f"Start Query: {statement}")
     logger.info(f"Parameters: {parameters}")
 
+
 @event.listens_for(Engine, "after_cursor_execute")
 def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
     logger.info(f"End Query: {statement}")
+
 
 # Log commits
 @event.listens_for(Engine, "commit")
 def commit(conn):
     logger.info("Commit")
 
+
 # Log rollbacks
 @event.listens_for(Engine, "rollback")
 def rollback(conn):
     logger.info("Rollback")
+
 
 @app.route('/db_logs')
 def db_logs():
@@ -1643,6 +1694,7 @@ def db_logs():
         </html>
     """, logs="\n".join(log_records))
 
+
 @app.route('/scenes_data', methods=['GET'])
 def scenes_data():
     try:
@@ -1650,7 +1702,7 @@ def scenes_data():
         site = Site.query.filter_by(uuid=site_uuid).first()
         if not site:
             raise ValueError('Site not found')
-        
+
         scenes = Scene.query.filter_by(site_id=site.id).all()
         scenes_data = [scene.to_dict() for scene in scenes]
 
@@ -1658,6 +1710,7 @@ def scenes_data():
     except Exception as e:
         logger.error(f"Error retrieving scenes data: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/search_stash_for_all_sites', methods=['POST'])
 def search_stash_for_all_sites():
@@ -1736,7 +1789,7 @@ def search_stash_for_all_sites():
 
         # Extract scenes from the response
         stash_scenes = result.get('data', {}).get('findScenes', {}).get('scenes', [])
-        
+
         app.logger.debug(f"Number of Scenes Retrieved from Stash: {len(stash_scenes)}")
 
         # If no scenes are found, log the information and return
@@ -1802,7 +1855,8 @@ def search_stash_for_all_sites():
         log_entry('ERROR', f"Error searching stash for matches across all sites: {e}")
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
+
+def main():
     def on_clicked(icon, item):
         if item.text == "Open Jizzarr":
             webbrowser.open("http://127.0.0.1:6900")
@@ -1840,3 +1894,5 @@ if __name__ == '__main__':
     run_tray_icon()
 
 
+if __name__ == '__main__':
+    main()

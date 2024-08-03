@@ -1,15 +1,18 @@
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy import Index
 import datetime
+
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import Index
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import configure_mappers
 
 db = SQLAlchemy()
+
 
 class Config(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String, unique=True, nullable=False)
     value = db.Column(db.String, nullable=False)
+
 
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -23,6 +26,7 @@ class Site(db.Model):
     logo = db.Column(db.String)
     home_directory = db.Column(db.String)
     scenes = db.relationship('Scene', backref='site', lazy=True)
+
 
 class Scene(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -47,7 +51,8 @@ class Scene(db.Model):
     foreign_id = db.Column(db.Integer)
     url = db.Column(db.String(255))
 
-    def __init__(self, site_id, title, date, duration, image, performers, status, local_path, year, episode_number, slug, overview, credits, release_date_utc, images, trailer, genres, foreign_guid, foreign_id, url):
+    def __init__(self, site_id, title, date, duration, image, performers, status, local_path, year, episode_number,
+                 slug, overview, credits, release_date_utc, images, trailer, genres, foreign_guid, foreign_id, url):
         self.site_id = site_id
         self.title = title
         self.date = date
@@ -94,9 +99,11 @@ class Scene(db.Model):
             'url': self.url,
         }
 
+
 class LibraryDirectory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     path = db.Column(db.String, nullable=False, unique=True)
+
 
 # Configure mappers to use confirm_deleted_rows=False
 configure_mappers()
@@ -105,6 +112,7 @@ for mapper in db.Model.registry.mappers:
 
 # Add indexing for the Scene model
 Index('idx_scene_foreign_guid', Scene.foreign_guid)
+
 
 class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)

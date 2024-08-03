@@ -1,18 +1,20 @@
-import os
-import time
-import logging
-import shutil
-from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-from mutagen.mp4 import MP4, MP4Tags
 import json
+import logging
+import os
+import re
+import shutil
+import time
+from pathlib import Path
+
 import requests
+from flask import Flask
+from mutagen.mp4 import MP4, MP4Tags
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
-from models import db, Site, Scene, Config, Log
-import re
-from flask import Flask
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from models import db, Site, Scene, Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
+
 def initialize_database():
     with app.app_context():
         db.create_all()
@@ -34,6 +37,7 @@ def initialize_database():
         if 'site' not in tables:
             logger.error("The 'site' table does not exist. Ensure database initialization.")
             raise Exception("Database not properly initialized. 'site' table is missing.")
+
 
 class Watcher:
     DIRECTORY_TO_WATCH = None
@@ -67,27 +71,27 @@ class Watcher:
                     logger.info(f"Processing existing file: {file_path}")
                     Handler().process_file(file_path, directory)
 
-class Handler(FileSystemEventHandler):
 
+class Handler(FileSystemEventHandler):
     def process(self, event):
         if event.is_directory:
             return None
         elif event.event_type == 'created':
             logger.info(f"New file detected: {event.src_path}")
-            
+
             # Ignore .part files
             if event.src_path.endswith('.part'):
                 logger.info(f"Ignoring .part file: {event.src_path}")
                 return
-            
+
             # Wait for the file to be completely written
             time.sleep(5)  # Adjust the delay as necessary
-            
+
             # Ensure the file exists and is not empty
             if not os.path.exists(event.src_path) or os.path.getsize(event.src_path) == 0:
                 logger.warning(f"File {event.src_path} does not exist or is empty after waiting")
                 return
-            
+
             if event.src_path.endswith(('.mp4', '.m4v', '.mov', '.json')):
                 logger.info(f"Detected new file: {event.src_path}")
                 self.process_file(event.src_path, Watcher.DIRECTORY_TO_WATCH)
@@ -108,6 +112,7 @@ class Handler(FileSystemEventHandler):
                 else:
                     logger.info(f"No match found for file {file_path} with UUID {uuid}")
 
+
 def fetch_custom_tag(file_path):
     try:
         video = MP4(file_path)
@@ -115,15 +120,16 @@ def fetch_custom_tag(file_path):
             return video["----:com.apple.iTunes:UUID"][0]  # Retrieve the custom UUID tag
         else:
             return None
-    except Exception as e:
+    except Exception:
         return None
+
 
 def match_scene_by_uuid(uuid, file_path):
     with app.app_context():
         engine = create_engine(f'sqlite:///{db_path}')
         Session = sessionmaker(bind=engine)
         session = Session()
-        
+
         try:
             matching_scene = session.query(Scene).filter_by(foreign_guid=uuid.decode('utf-8')).first()
             if matching_scene:
@@ -141,47 +147,53 @@ def match_scene_by_uuid(uuid, file_path):
         finally:
             session.close()
 
+
 def process_json_file(json_file_path, download_dir):
     with app.app_context():
         engine = create_engine(f'sqlite:///{db_path}')
         Session = sessionmaker(bind=engine)
         session = Session()
-        
+
         try:
             json_file_path = str(json_file_path)  # Ensure the path is a string
             if json_file_path.endswith('.json'):
                 with open(json_file_path, 'r') as f:
                     data = json.load(f)
-                
+
                 scene_url = data['URL']
                 original_filename = data['filename']
                 metadata = fetch_metadata(scene_url)
-                
+
                 if metadata:
                     new_filename = construct_filename(metadata, original_filename)
                     original_filepath = os.path.join(download_dir, original_filename)
                     new_filepath = os.path.join(download_dir, new_filename)
-                    
+
                     # Only rename if the original file exists
                     if os.path.exists(original_filepath):
                         try:
                             os.rename(original_filepath, new_filepath)
                             logger.info(f"Renamed {original_filename} to {new_filename}")
-                            
+
                             # Tag the file with metadata before moving
                             tag_file_with_metadata(new_filepath, metadata)
                             logger.info(f"Metadata tagged for file {new_filepath}")
-                            
+
                             # Update the JSON file with the new filename
                             data['filename'] = new_filename
-                            new_json_filepath = os.path.join(download_dir, new_filename.replace(new_filename.split('.')[-1], 'json'))
+                            new_json_filepath = os.path.join(download_dir,
+                                                             new_filename.replace(new_filename.split('.')[-1], 'json'))
                             os.rename(json_file_path, new_json_filepath)
                             with open(new_json_filepath, 'w') as f:
                                 json.dump(data, f, indent=4)
-                            logger.info(f"Updated and renamed JSON file {json_file_path} to {new_json_filepath} with new filename {new_filename}")
-                            
+                            logger.info(
+                                f"Updated and renamed JSON file {json_file_path} to {new_json_filepath} with new filename {new_filename}")
+
                             # Move the files and update paths
-                            new_file_path, new_json_file_path = move_files_to_site_directory(new_filepath, new_json_filepath, metadata['site']['name'], session)
+                            new_file_path, new_json_file_path = move_files_to_site_directory(new_filepath,
+                                                                                             new_json_filepath,
+                                                                                             metadata['site']['name'],
+                                                                                             session)
 
                             # Added delay after moving the file
                             time.sleep(2)
@@ -191,7 +203,7 @@ def process_json_file(json_file_path, download_dir):
                                 match_scene_with_uuid(metadata['foreign_guid'], new_file_path, session)
                             else:
                                 logger.error(f"Failed to move file {new_filepath}")
-                            
+
                             return new_filename
                         except Exception as e:
                             logger.error(f"Failed to rename file: {e}")
@@ -204,6 +216,7 @@ def process_json_file(json_file_path, download_dir):
         finally:
             session.close()
 
+
 def fetch_metadata(scene_url):
     response = requests.post('http://localhost:6900/get_metadata', json={'scene_url': scene_url})
     if response.status_code == 200:
@@ -212,11 +225,13 @@ def fetch_metadata(scene_url):
         logger.error(f"Failed to fetch metadata: {response.status_code}")
         return None
 
+
 def construct_filename(metadata, original_filename):
     performers = ', '.join([performer['name'] for performer in metadata['performers']])
     file_extension = original_filename[original_filename.rfind('.'):]
     new_filename = f"{metadata['site']['name']} - {metadata['date']} - {metadata['title']} - {performers}"
     return sanitize_filename(new_filename + file_extension)
+
 
 def tag_file_with_metadata(file_path, metadata):
     try:
@@ -236,11 +251,13 @@ def tag_file_with_metadata(file_path, metadata):
     except Exception as e:
         logger.error(f"Failed to tag metadata: {e}")
 
+
 def sanitize_filename(filename):
     sanitized = re.sub(r'[<>:"/\\|?*]', '', filename)
     sanitized = re.sub(r'\s+', ' ', sanitized)
     sanitized = sanitized.strip()
     return sanitized
+
 
 def move_files_to_site_directory(file_path, json_file_path, site_name, session):
     try:
@@ -248,33 +265,34 @@ def move_files_to_site_directory(file_path, json_file_path, site_name, session):
         if not site or not site.home_directory:
             logger.error(f"Site {site_name} not found or has no home directory set.")
             return None, None
-        
+
         try:
             destination_dir = Path(site.home_directory)
             destination_dir.mkdir(parents=True, exist_ok=True)
 
             new_file_path = destination_dir / Path(file_path).name
             new_json_file_path = destination_dir / Path(json_file_path).name
-            
+
             shutil.move(file_path, new_file_path)
             shutil.move(json_file_path, new_json_file_path)
-            
+
             logger.info(f"Moved {file_path} to {new_file_path}")
             logger.info(f"Moved {json_file_path} to {new_json_file_path}")
-                
+
             return str(new_file_path), str(new_json_file_path)
-                
+
         except Exception as e:
             logger.error(f"Failed to move files: {e}")
             return None, None
     finally:
         session.close()
 
+
 def match_scene_with_uuid(uuid, file_path, session):
     try:
         logger.info(f"Matching file {file_path} with UUID {uuid}")
         scene = session.query(Scene).filter_by(foreign_guid=uuid).first()
-        
+
         if scene:
             scene.local_path = file_path
             scene.status = 'Found'
@@ -285,7 +303,8 @@ def match_scene_with_uuid(uuid, file_path, session):
     except Exception as e:
         logger.error(f"Failed to match file {file_path} with UUID {uuid}: {e}")
 
-if __name__ == '__main__':
+
+def main():
     with app.app_context():
         initialize_database()
         download_folder = Config.query.filter_by(key='downloadFolder').first()
@@ -293,3 +312,7 @@ if __name__ == '__main__':
             Watcher.DIRECTORY_TO_WATCH = download_folder.value
             watcher = Watcher()
             watcher.run()
+
+
+if __name__ == '__main__':
+    main()
