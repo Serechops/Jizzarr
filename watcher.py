@@ -62,7 +62,8 @@ class Watcher:
             logger.info("Observer stopped")
         self.observer.join()
 
-    def scan_existing_files(self, directory):
+    @staticmethod
+    def scan_existing_files(directory):
         logger.info(f"Scanning existing files in directory: {directory}")
         for root, _, files in os.walk(directory):
             for file in files:
@@ -100,7 +101,8 @@ class Handler(FileSystemEventHandler):
         logger.info(f"on_created event detected: {event.src_path}")
         self.process(event)
 
-    def process_file(self, file_path, download_dir):
+    @staticmethod
+    def process_file(file_path, download_dir):
         if file_path.endswith('.json'):
             process_json_file(file_path, download_dir)
         else:
@@ -127,8 +129,7 @@ def fetch_custom_tag(file_path):
 def match_scene_by_uuid(uuid, file_path):
     with app.app_context():
         engine = create_engine(f'sqlite:///{db_path}')
-        Session = sessionmaker(bind=engine)
-        session = Session()
+        session = sessionmaker(bind=engine)()
 
         try:
             matching_scene = session.query(Scene).filter_by(foreign_guid=uuid.decode('utf-8')).first()
@@ -151,8 +152,7 @@ def match_scene_by_uuid(uuid, file_path):
 def process_json_file(json_file_path, download_dir):
     with app.app_context():
         engine = create_engine(f'sqlite:///{db_path}')
-        Session = sessionmaker(bind=engine)
-        session = Session()
+        session = sessionmaker(bind=engine)()
 
         try:
             json_file_path = str(json_file_path)  # Ensure the path is a string
