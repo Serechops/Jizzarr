@@ -51,8 +51,7 @@ class Scene(db.Model):
     foreign_id = db.Column(db.Integer)
     url = db.Column(db.String(255))
 
-    def __init__(self, site_id, title, date, duration, image, performers, status, local_path, year, episode_number,
-                 slug, overview, credits, release_date_utc, images, trailer, genres, foreign_guid, foreign_id, url):
+    def __init__(self, site_id, title, date, duration, image, performers, status, local_path, year, episode_number, slug, overview, credits, release_date_utc, images, trailer, genres, foreign_guid, foreign_id, url):
         self.site_id = site_id
         self.title = title
         self.date = date
@@ -118,4 +117,4 @@ class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     level = db.Column(db.String, nullable=False)
     message = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False)

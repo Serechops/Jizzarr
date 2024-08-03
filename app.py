@@ -1062,8 +1062,7 @@ def get_scene_details():
                 return jsonify({"error": "URL not found in the response"}), 404
         else:
             app.logger.error(f"Failed to fetch data from TPDB API. HTTP Status code: {response.status_code}")
-            return jsonify(
-                {"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
+            return jsonify({"error": f"Failed to fetch data. HTTP Status code: {response.status_code}"}), response.status_code
 
     except Exception as e:
         app.logger.error(f"Exception occurred while fetching scene details: {str(e)}")
@@ -1094,9 +1093,7 @@ def collection_stats():
         total_scenes = Scene.query.count()
         collected_scenes = Scene.query.filter(Scene.status == 'Found', Scene.local_path.isnot(None)).count()
 
-        collected_duration = db.session.query(func.sum(Scene.duration)).filter(Scene.status == 'Found',
-                                                                               Scene.local_path.isnot(
-                                                                                   None)).scalar() or 0
+        collected_duration = db.session.query(func.sum(Scene.duration)).filter(Scene.status == 'Found', Scene.local_path.isnot(None)).scalar() or 0
         total_duration = db.session.query(func.sum(Scene.duration)).scalar() or 0
         missing_duration = total_duration - collected_duration
         avg_rating = db.session.query(func.avg(Site.rating)).scalar() or 0
@@ -1272,8 +1269,7 @@ def process_studio(studio_name, headers, app):
                             title=scene_data['Title'],
                             date=scene_data['ReleaseDate'],
                             duration=scene_data['Duration'],
-                            image=next((img['Url'] for img in scene_data['Images'] if img['CoverType'] == 'Screenshot'),
-                                       ''),
+                            image=next((img['Url'] for img in scene_data['Images'] if img['CoverType'] == 'Screenshot'), ''),
                             performers=performers,
                             status=scene_data.get('Status', ''),
                             local_path=scene_data.get('LocalPath', ''),
