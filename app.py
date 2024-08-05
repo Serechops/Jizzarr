@@ -30,6 +30,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from config import Config as AppConfig
 from models import db, Config, Site, Scene, Log, LibraryDirectory
+from watcher import main as watcher_main
 
 # Initialize the Flask application
 app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
@@ -1711,13 +1712,16 @@ def main():
         with app.app_context():
             db.create_all()
             delete_duplicate_scenes()
-            subprocess.Popen(['python', 'watcher.py'])
         app.run(debug=False, host='0.0.0.0', port=6900)
 
     # Start the Flask app in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
+
+    watcher_thread = threading.Thread(target=watcher_main)
+    watcher_thread.daemon = True
+    watcher_thread.start()
 
     # Open the browser tab
     webbrowser.open_new('http://127.0.0.1:6900')
