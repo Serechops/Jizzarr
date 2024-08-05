@@ -117,4 +117,4 @@ class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     level = db.Column(db.String, nullable=False)
     message = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.now(datetime.timezone.utc), nullable=False)
