@@ -13,7 +13,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-import subprocess
+from watcher import main as watcher_main
 
 import aiohttp
 import ffmpeg
@@ -1711,7 +1711,6 @@ def main():
         with app.app_context():
             db.create_all()
             delete_duplicate_scenes()
-            subprocess.Popen(['python', 'watcher.py'])
         app.run(debug=False, host='0.0.0.0', port=6900)
 
     # Start the Flask app in a separate thread
@@ -1721,6 +1720,9 @@ def main():
 
     # Open the browser tab
     webbrowser.open_new('http://127.0.0.1:6900')
+    watcher_thread = threading.Thread(target=watcher_main)
+    watcher_thread.daemon = True
+    watcher_thread.start()
 
     # Run the system tray icon
     run_tray_icon()
