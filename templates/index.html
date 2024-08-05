@@ -264,7 +264,7 @@
                 const eventSource = new EventSource('/progress');
                 eventSource.onmessage = function(event) {
                     const data = JSON.parse(event.data);
-                    const progress = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
+                    const progress = Math.round((data.completed / data.total) * 100);
                     updateProgressBar(progress);
                     localStorage.setItem('stashProgress', progress);
                     if (progress >= 100) {
