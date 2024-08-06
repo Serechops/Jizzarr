@@ -416,7 +416,7 @@ def add_site():
     else:
         try:
             rating = float(rating)
-        except ValueError:
+        except (ValueError, TypeError):
             rating = None
 
     tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
@@ -545,7 +545,6 @@ def add_site():
     except Exception as e:
         log_entry('ERROR', f"Error adding site: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/remove_site/<string:site_uuid>', methods=['DELETE'])
 def remove_site(site_uuid):
@@ -1059,18 +1058,30 @@ def populate_from_stash_thread():
                 log_entry('INFO', 'No scenes found from Stash')
                 return
 
-            studio_names = {scene['studio']['name'] for scene in scenes if scene.get('studio')}
-            log_entry('DEBUG', f'Found studio names: {studio_names}')
-            progress['total'] = len(studio_names)
+            # Use a dictionary to collect studio names and their scene counts
+            studio_scene_counts = {}
+            for scene in scenes:
+                studio = scene.get('studio')
+                if studio:
+                    studio_name = studio.get('name')
+                    if studio_name:
+                        if studio_name in studio_scene_counts:
+                            studio_scene_counts[studio_name] += 1
+                        else:
+                            studio_scene_counts[studio_name] = 1
+
+            # Sort studios by scene count in ascending order
+            sorted_studios = sorted(studio_scene_counts.items(), key=lambda item: item[1])
+
+            log_entry('DEBUG', f'Studios sorted by scene count: {sorted_studios}')
+            progress['total'] = len(sorted_studios)
             progress['completed'] = 0
 
             headers = {'Authorization': f'Bearer {tpdb_api_key.value}'}
 
-            # Using ThreadPoolExecutor for parallel processing
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = [executor.submit(process_studio, studio_name, headers, app) for studio_name in studio_names]
-                for future in futures:
-                    future.result()  # Wait for all futures to complete
+            # Process each studio, sorted by the number of scenes
+            for studio_name, scene_count in sorted_studios:
+                process_studio_and_add_site(studio_name, headers, app)
 
             delete_duplicate_scenes()
 
@@ -1084,7 +1095,8 @@ def populate_from_stash_thread():
             progress['completed'] = 0
 
 
-def process_studio(studio_name, headers, app):
+
+def process_studio_and_add_site(studio_name, headers, app):
     with app.app_context():
         log_entry('INFO', f'Starting to process studio: {studio_name}')
         search_url = f"https://api.theporndb.net/jizzarr/site/search?q={studio_name}"
@@ -1100,78 +1112,36 @@ def process_studio(studio_name, headers, app):
 
         search_results = search_response.json()
         log_entry('DEBUG', f'Search results for {studio_name}: {json.dumps(search_results)}')
+        
         for site_data in search_results:
             log_entry('DEBUG', f'Processing site data: {json.dumps(site_data)}')
-            with db.session.no_autoflush:
-                site = Site.query.filter_by(uuid=site_data['ForeignGuid']).first()
-                if site:
-                    log_entry('INFO', f'Updating existing site: {site_data["Title"]}')
-                    site.name = site_data['Title']
-                    site.url = site_data['Homepage']
-                    site.description = site_data['Overview']
-                    site.network = site_data['Network']
-                    site.logo = next((img['Url'] for img in site_data['Images'] if img['CoverType'] == 'Logo'), '')
-                else:
-                    log_entry('INFO', f'Creating new site: {site_data["Title"]}')
-                    site = Site(
-                        uuid=site_data['ForeignGuid'],
-                        name=site_data['Title'],
-                        url=site_data['Homepage'],
-                        description=site_data['Overview'],
-                        rating=None,
-                        network=site_data['Network'],
-                        parent='',
-                        logo=next((img['Url'] for img in site_data['Images'] if img['CoverType'] == 'Logo'), '')
-                    )
-                    db.session.add(site)
-                db.session.commit()
 
-            scenes_data = fetch_scenes_data(site_data['ForeignId'], headers)
-            if scenes_data:
-                log_entry('DEBUG', f'Scenes data for site {site_data["Title"]}: {json.dumps(scenes_data)}')
-                scenes_added = 0
-                for scene_data in scenes_data:
-                    with db.session.no_autoflush:
-                        existing_scene = Scene.query.filter_by(foreign_guid=scene_data['ForeignGuid']).first()
-                        if existing_scene:
-                            log_entry('INFO', f'Scene with ForeignGuid {scene_data["ForeignGuid"]} already exists. Skipping.')
-                            continue
+            # Prepare site data in the format expected by add_site
+            site_payload = {
+                'site': {
+                    'uuid': site_data['ForeignGuid'],
+                    'name': site_data['Title'],
+                    'url': site_data['Homepage'],
+                    'description': site_data['Overview'],
+                    'rating': None,
+                    'network': site_data['Network'],
+                    'parent': '',
+                    'logo': next((img['Url'] for img in site_data['Images'] if img['CoverType'] == 'Logo'), '')
+                }
+            }
 
-                        performers = ', '.join([performer['Name'] for performer in scene_data['Credits']])
-                        scene = Scene(
-                            site_id=site.id,
-                            title=scene_data['Title'],
-                            date=scene_data['ReleaseDate'],
-                            duration=scene_data['Duration'],
-                            image=next((img['Url'] for img in scene_data['Images'] if img['CoverType'] == 'Screenshot'), ''),
-                            performers=performers,
-                            status=scene_data.get('Status', ''),
-                            local_path=scene_data.get('LocalPath', ''),
-                            year=scene_data.get('Year', 0),
-                            episode_number=scene_data.get('EpisodeNumber', 0),
-                            slug=scene_data.get('Slug', ''),
-                            overview=scene_data.get('Overview', ''),
-                            credits=json.dumps(scene_data.get('Credits', [])),
-                            release_date_utc=scene_data.get('ReleaseDateUtc', ''),
-                            images=json.dumps(scene_data.get('Images', [])),
-                            trailer=scene_data.get('Trailer', ''),
-                            genres=json.dumps(scene_data.get('Genres', [])),
-                            foreign_guid=scene_data.get('ForeignGuid', ''),
-                            foreign_id=scene_data.get('ForeignId', 0),
-                            url=scene_data.get('Url')
-                        )
-                        db.session.add(scene)
-                        scenes_added += 1
-                db.session.commit()
-                log_entry('INFO', f'Added {scenes_added} scenes for site: {site_data["Title"]}')
+            # Trigger the add_site function
+            add_site_response = app.test_client().post('/add_site', json=site_payload)
+            if add_site_response.status_code in (200, 201):
+                log_entry('INFO', f'Successfully added/updated site: {site_data["Title"]}')
+            else:
+                log_entry('ERROR', f'Failed to add/update site: {site_data["Title"]}, Response: {add_site_response.json}')
 
         progress['completed'] += 1
         log_entry('INFO', f'Progress: {progress["completed"]}/{progress["total"]}')
 
-
 @app.route('/populate_from_stash', methods=['POST'])
 def populate_from_stash():
-    # Validate configuration before starting the thread
     stash_endpoint = Config.query.filter_by(key='stashEndpoint').first()
     stash_api_key = Config.query.filter_by(key='stashApiKey').first()
     tpdb_api_key = Config.query.filter_by(key='tpdbApiKey').first()
@@ -1182,7 +1152,6 @@ def populate_from_stash():
     thread = threading.Thread(target=populate_from_stash_thread)
     thread.start()
     return jsonify({'message': 'Stash population started'}), 202
-
 
 def fetch_scenes_data(foreign_id, headers):
     url = f"https://api.theporndb.net/jizzarr/site/{foreign_id}"
