@@ -437,7 +437,7 @@ def add_site():
             existing_site.parent = data['site']['parent']
             existing_site.logo = data['site'].get('logo', '')
 
-            Site.query.filter_by(id=existing_site.id).delete()
+            Scene.query.filter_by(site_id=existing_site.id).delete()
             scenes = []
             per_page_scene = 250
 
