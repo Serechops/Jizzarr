@@ -10,7 +10,6 @@ import sys
 import threading
 import time
 import webbrowser
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from watcher import main as watcher_main
@@ -437,7 +436,7 @@ def add_site():
             existing_site.parent = data['site']['parent']
             existing_site.logo = data['site'].get('logo', '')
 
-            Site.query.filter_by(id=existing_site.id).delete()
+            Scene.query.filter_by(site_id=existing_site.id).delete()
             scenes = []
             per_page_scene = 250
 
@@ -1112,7 +1111,7 @@ def process_studio_and_add_site(studio_name, headers, app):
 
         search_results = search_response.json()
         log_entry('DEBUG', f'Search results for {studio_name}: {json.dumps(search_results)}')
-        
+
         for site_data in search_results:
             log_entry('DEBUG', f'Processing site data: {json.dumps(site_data)}')
 

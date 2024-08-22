@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "jizzarr"
-version = "0.16"
+version = "0.17"
 description = "A collection tracker that integrates with TPDB and Stash."
 readme = "README.md"
 authors = ["Serechops"]
