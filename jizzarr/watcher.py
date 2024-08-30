@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from models import db, Site, Scene, Config
+from jizzarr.models import db, Site, Scene, Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

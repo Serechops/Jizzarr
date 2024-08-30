@@ -12,7 +12,6 @@ import time
 import webbrowser
 from contextlib import contextmanager
 from pathlib import Path
-from watcher import main as watcher_main
 
 import aiohttp
 import ffmpeg
@@ -27,8 +26,9 @@ from sqlalchemy import text, event, case, func
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from config import Config as AppConfig
-from models import db, Config, Site, Scene, Log, LibraryDirectory
+from jizzarr.config import Config as AppConfig
+from jizzarr.models import db, Config, Site, Scene, Log, LibraryDirectory
+from jizzarr.watcher import main as watcher_main
 
 # Initialize the Flask application
 app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'), template_folder=os.path.join(os.getcwd(), 'templates'), static_folder=os.path.join(os.getcwd(), 'static'))
@@ -544,6 +544,7 @@ def add_site():
     except Exception as e:
         log_entry('ERROR', f"Error adding site: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/remove_site/<string:site_uuid>', methods=['DELETE'])
 def remove_site(site_uuid):
@@ -1094,7 +1095,6 @@ def populate_from_stash_thread():
             progress['completed'] = 0
 
 
-
 def process_studio_and_add_site(studio_name, headers, app):
     with app.app_context():
         log_entry('INFO', f'Starting to process studio: {studio_name}')
@@ -1139,6 +1139,7 @@ def process_studio_and_add_site(studio_name, headers, app):
         progress['completed'] += 1
         log_entry('INFO', f'Progress: {progress["completed"]}/{progress["total"]}')
 
+
 @app.route('/populate_from_stash', methods=['POST'])
 def populate_from_stash():
     stash_endpoint = Config.query.filter_by(key='stashEndpoint').first()
@@ -1151,6 +1152,7 @@ def populate_from_stash():
     thread = threading.Thread(target=populate_from_stash_thread)
     thread.start()
     return jsonify({'message': 'Stash population started'}), 202
+
 
 def fetch_scenes_data(foreign_id, headers):
     url = f"https://api.theporndb.net/jizzarr/site/{foreign_id}"
