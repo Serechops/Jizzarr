@@ -4,7 +4,7 @@ version = "0.17"
 description = "A collection tracker that integrates with TPDB and Stash."
 readme = "README.md"
 authors = ["Serechops"]
-include = ["**/static/**/*"]
+include = ["**/static/**/*", "**/templates/**/*", "**/instance/**/*"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
