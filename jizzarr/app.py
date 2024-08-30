@@ -31,7 +31,7 @@ from config import Config as AppConfig
 from models import db, Config, Site, Scene, Log, LibraryDirectory
 
 # Initialize the Flask application
-app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
+app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'), template_folder=os.path.join(os.getcwd(), 'templates'), static_folder=os.path.join(os.getcwd(), 'static'))
 
 # Ensure the instance folder exists
 if not os.path.exists(app.instance_path):
@@ -1665,7 +1665,7 @@ def main():
             sys.exit(0)
 
     def run_tray_icon():
-        icon_path = os.path.join(app.root_path, 'static', 'favicon.ico')
+        icon_path = os.path.join(app.root_path, '..', 'static', 'favicon.ico')
         icon = pystray.Icon("Jizzarr")
         icon.icon = Image.open(icon_path)
         icon.title = "Jizzarr"
