@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Flask application for database context
-main_path = Path(__file__).parent.parent.resolve()
+main_path = Path(__file__).parent.parent.resolve() / 'jizzarr'
 app = Flask(__name__)
 # Using an absolute path to the database file
 db_path = main_path / 'instance' / 'jizzarr.db'

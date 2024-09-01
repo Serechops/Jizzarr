@@ -32,14 +32,14 @@ from jizzarr.watcher import main as watcher_main
 
 # Initialize the Flask application
 
-main_path = Path(__file__).parent.parent.resolve()
-app = Flask(__name__, instance_path=str(main_path / 'instance'), template_folder=main_path / 'templates', static_folder=main_path / 'static')
+main_path = Path(__file__).parent.parent.resolve() / 'jizzarr' / 'web'
+app = Flask(__name__, instance_path=str(main_path.parent / 'instance'), template_folder=main_path / 'templates', static_folder=main_path / 'static')
 
 # Ensure the instance folder exists
 if not os.path.exists(app.instance_path):
     os.makedirs(app.instance_path)
 # Use the instance folder for SQLite database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'jizzarr.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + str(main_path.parent / 'instance' / 'jizzarr.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 event_queue = queue.Queue()
