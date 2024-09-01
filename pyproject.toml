@@ -4,7 +4,7 @@ version = "0.17"
 description = "A collection tracker that integrates with TPDB and Stash."
 readme = "README.md"
 authors = ["Serechops"]
-include = []
+include = ["**/static/**/*", "**/templates/**/*", "**/instance/**/*"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"
@@ -16,7 +16,7 @@ requests = "^2.26.0"
 pystray = "^0.19"
 Pillow = "^10.4.0"
 moviepy = "^1.0.3"
-watchdog = "^4.0"
+watchdog = "^5.0"
 fuzzywuzzy = { extras = ["speedup"], version = "^0.18.0" }
 aiohttp = "^3.10"
 asyncio = "^3.4.3"
@@ -44,7 +44,7 @@ ignore = ["E501", "E722"]
 generate-setup-file = true
 
 [tool.poetry.scripts]
-jizzarr = "app:main"
+jizzarr = "jizzarr.app:main"
 
 [build-system]
 requires = ["poetry-core"]
