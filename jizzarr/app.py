@@ -6,7 +6,6 @@ import mimetypes
 import os
 import queue
 import re
-import sys
 import threading
 import time
 import webbrowser
@@ -1666,7 +1665,6 @@ def main():
             webbrowser.open("http://127.0.0.1:6900")
         elif item.text == "Quit":
             icon.stop()
-            sys.exit(0)
 
     def run_tray_icon():
         icon_path = main_path / 'static' / 'favicon.ico'
