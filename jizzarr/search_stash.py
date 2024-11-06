@@ -3,7 +3,7 @@ import sys
 import requests
 from flask import Flask
 
-from models import db, Site, Scene
+from jizzarr.models import db, Site, Scene
 
 
 def create_app():

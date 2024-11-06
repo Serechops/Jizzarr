@@ -14,15 +14,16 @@ from sqlalchemy.orm import sessionmaker
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from models import db, Site, Scene, Config
+from jizzarr.models import db, Site, Scene, Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Flask application for database context
+main_path = Path(__file__).parent.parent.resolve() / 'jizzarr'
 app = Flask(__name__)
 # Using an absolute path to the database file
-db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'instance', 'jizzarr.db'))
+db_path = main_path / 'instance' / 'jizzarr.db'
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)

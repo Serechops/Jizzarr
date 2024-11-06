@@ -6,13 +6,11 @@ import mimetypes
 import os
 import queue
 import re
-import sys
 import threading
 import time
 import webbrowser
 from contextlib import contextmanager
 from pathlib import Path
-from watcher import main as watcher_main
 
 import aiohttp
 import ffmpeg
@@ -27,17 +25,20 @@ from sqlalchemy import text, event, case, func
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from config import Config as AppConfig
-from models import db, Config, Site, Scene, Log, LibraryDirectory
+from jizzarr.config import Config as AppConfig
+from jizzarr.models import db, Config, Site, Scene, Log, LibraryDirectory
+from jizzarr.watcher import main as watcher_main
 
 # Initialize the Flask application
-app = Flask(__name__, instance_path=os.path.join(os.getcwd(), 'instance'))
+
+main_path = Path(__file__).parent.parent.resolve() / 'jizzarr' / 'web'
+app = Flask(__name__, instance_path=str(main_path.parent / 'instance'), template_folder=main_path / 'templates', static_folder=main_path / 'static')
 
 # Ensure the instance folder exists
 if not os.path.exists(app.instance_path):
     os.makedirs(app.instance_path)
 # Use the instance folder for SQLite database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'jizzarr.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + str(main_path.parent / 'instance' / 'jizzarr.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 event_queue = queue.Queue()
@@ -544,6 +545,7 @@ def add_site():
     except Exception as e:
         log_entry('ERROR', f"Error adding site: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/remove_site/<string:site_uuid>', methods=['DELETE'])
 def remove_site(site_uuid):
@@ -1094,7 +1096,6 @@ def populate_from_stash_thread():
             progress['completed'] = 0
 
 
-
 def process_studio_and_add_site(studio_name, headers, app):
     with app.app_context():
         log_entry('INFO', f'Starting to process studio: {studio_name}')
@@ -1139,6 +1140,7 @@ def process_studio_and_add_site(studio_name, headers, app):
         progress['completed'] += 1
         log_entry('INFO', f'Progress: {progress["completed"]}/{progress["total"]}')
 
+
 @app.route('/populate_from_stash', methods=['POST'])
 def populate_from_stash():
     stash_endpoint = Config.query.filter_by(key='stashEndpoint').first()
@@ -1151,6 +1153,7 @@ def populate_from_stash():
     thread = threading.Thread(target=populate_from_stash_thread)
     thread.start()
     return jsonify({'message': 'Stash population started'}), 202
+
 
 def fetch_scenes_data(foreign_id, headers):
     url = f"https://api.theporndb.net/jizzarr/site/{foreign_id}"
@@ -1662,10 +1665,9 @@ def main():
             webbrowser.open("http://127.0.0.1:6900")
         elif item.text == "Quit":
             icon.stop()
-            sys.exit(0)
 
     def run_tray_icon():
-        icon_path = os.path.join(app.root_path, 'static', 'favicon.ico')
+        icon_path = main_path / 'static' / 'favicon.ico'
         icon = pystray.Icon("Jizzarr")
         icon.icon = Image.open(icon_path)
         icon.title = "Jizzarr"
